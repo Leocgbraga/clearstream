@@ -1,8 +1,9 @@
-// Phase 1 verification: load the built chrome-mv3 extension in Chromium and check that
-//  A) the player actually plays a real HLS stream + media-chrome controls render,
+// Smoke/eyeball harness: load the built chrome-mv3 extension in Chromium and check that
+//  A) the player plays a real HLS stream + media-chrome controls + quality renditions (Phase 1/2),
 //  B) the popup UI renders,
-//  C) the detection scan (Performance API + DOM) finds an .m3u8 on a real page.
-// Produces screenshots in /tmp/cs-shots. Not a unit test — a smoke/eyeball harness.
+//  C) the detection scan (Performance API + DOM) finds an .m3u8 on a real page,
+//  D) the DNR modifyHeaders session-rule shape is accepted by the browser (Phase 3 injector).
+// Produces screenshots in /tmp/cs-shots. Not a unit test.
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -83,9 +84,41 @@ try {
   });
   results.detect = { ok: found.length > 0, count: found.length, sample: found.slice(0, 2) };
 
+  // D) Phase 3: confirm the DNR session modifyHeaders rule shape (the Chrome injector's core call)
+  //    is accepted and stored by this browser. (End-to-end Referer-on-wire needs a gated CDN.)
+  const dnr = await sw.evaluate(async () => {
+    const id = 99999;
+    await chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [id],
+      addRules: [
+        {
+          id,
+          priority: 1,
+          action: {
+            type: 'modifyHeaders',
+            requestHeaders: [{ header: 'Referer', operation: 'set', value: 'https://example.test/' }],
+          },
+          condition: { tabIds: [1], resourceTypes: ['xmlhttprequest', 'media', 'other'] },
+        },
+      ],
+    });
+    const rules = await chrome.declarativeNetRequest.getSessionRules();
+    const r = rules.find((x) => x.id === id);
+    await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [id] });
+    return {
+      stored: !!r,
+      header: r?.action?.requestHeaders?.[0]?.header ?? null,
+      op: r?.action?.requestHeaders?.[0]?.operation ?? null,
+    };
+  });
+  results.headerInjection = {
+    ok: dnr.stored && String(dnr.header).toLowerCase() === 'referer' && dnr.op === 'set',
+    ...dnr,
+  };
+
   console.log('\n=== RESULTS ===');
   console.log(JSON.stringify(results, null, 2));
-  const allOk = results.player.ok && results.popup.ok;
+  const allOk = results.player.ok && results.popup.ok && results.detect.ok && results.headerInjection.ok;
   console.log(allOk ? '\nVERIFY: PASS' : '\nVERIFY: FAIL');
   process.exitCode = allOk ? 0 : 1;
 } finally {

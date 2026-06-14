@@ -1,26 +1,33 @@
-// ClearStream background — capture engine (Phase 1).
-// Two detection paths (hybrid, per decision D6):
-//   • Click-to-detect (default): popup sends DETECT → we scan the active tab via activeTab +
-//     scripting (Performance API + DOM), no broad host permission.
-//   • Passive (optional): webRequest observers registered at top level fire ONLY for hosts the
-//     user granted via the "auto-detect on all sites" toggle (else inert) → badge + capture.
-// All listeners registered synchronously at top level (SW is ephemeral).
-// See docs/research/06-capture-engine.md and docs/research/09-ux-permissions.md.
+// ClearStream background — capture engine (Phase 1) + header-injection orchestration (Phase 3).
+//
+// Detection (hybrid, decision D6):
+//   • Click-to-detect (default): popup sends DETECT → scan the active tab via activeTab + scripting
+//     (Performance API + DOM, all frames), capturing each frame's URL as the referer. No broad perms.
+//   • Passive (optional): top-level webRequest observers fire only for hosts the user granted via the
+//     "auto-detect on all sites" toggle → badge + capture request headers (incl. Referer/Cookie).
+//
+// Playback (Phase 3): popup → OPEN_PLAYER stashes the chosen stream keyed by the new player tab id
+// and opens player.html. The player then calls GET_PLAYBACK, which installs a tab-scoped header
+// rule (DNR on Chrome / blocking webRequest on Firefox) BEFORE returning — so headers are in place
+// before hls.js makes its first request (race-free). See docs/research/{06,07,08}.
 import { browser } from 'wxt/browser';
 import type { CapturedStream, ReplayHeaders } from '@/core/types';
 import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/core/detection';
 import { addStreams, clearTab, getStreams } from '@/core/storage';
-import type { Message, StreamsResponse } from '@/core/messages';
+import type { Message, OkResponse, PlaybackResponse, StreamsResponse } from '@/core/messages';
+import { createHeaderInjector } from '@/core/header-injector';
 
-/** Injected into each frame of the active tab (activeTab grant). Returns manifest URLs that are
- *  already loaded (Performance Resource Timing) or referenced in the DOM. */
-function scanPage(): string[] {
-  const out = new Set<string>();
+const injector = createHeaderInjector();
+const playbackKey = (tabId: number): string => `playback:${tabId}`;
+
+/** Injected into each frame of the active tab (activeTab grant). Returns the manifest URLs already
+ *  loaded (Performance API) or in the DOM, each paired with that frame's URL (used as referer). */
+function scanPage(): Array<{ u: string; ref: string }> {
+  const found = new Map<string, string>();
   const re = /\.(m3u8|mpd)(\?|#|$)/i;
+  const ref = location.href;
   try {
-    for (const e of performance.getEntriesByType('resource')) {
-      if (re.test(e.name)) out.add(e.name);
-    }
+    for (const e of performance.getEntriesByType('resource')) if (re.test(e.name)) found.set(e.name, ref);
   } catch {
     /* ignore */
   }
@@ -28,12 +35,12 @@ function scanPage(): string[] {
     document.querySelectorAll('video,source').forEach((el) => {
       const m = el as HTMLMediaElement;
       const s = m.src || m.currentSrc || el.getAttribute('src') || '';
-      if (s && re.test(s)) out.add(s);
+      if (s && re.test(s)) found.set(s, ref);
     });
   } catch {
     /* ignore */
   }
-  return [...out];
+  return [...found].map(([u, r]) => ({ u, ref: r }));
 }
 
 function toStream(
@@ -54,6 +61,21 @@ function toStream(
     createdAt: Date.now(),
   };
 }
+
+/** Best available headers to replay: captured ones, else a referer derived from the page URL. */
+function effectiveHeaders(stream: CapturedStream): ReplayHeaders {
+  const h: ReplayHeaders = { ...stream.replayHeaders };
+  if (!h.referer && stream.pageUrl) {
+    try {
+      h.referer = new URL(stream.pageUrl).origin + '/';
+    } catch {
+      /* pageUrl not a URL */
+    }
+  }
+  return h;
+}
+
+const hasAnyHeader = (h: ReplayHeaders): boolean => Boolean(h.referer || h.cookie || h.userAgent);
 
 async function setBadge(tabId: number, count: number): Promise<void> {
   try {
@@ -78,14 +100,50 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
     });
     const found: CapturedStream[] = [];
     for (const r of results) {
-      const urls = (r.result as string[] | undefined) ?? [];
-      for (const url of urls) found.push(toStream(url, tabId, r.frameId ?? 0, ''));
+      for (const { u, ref } of (r.result as Array<{ u: string; ref: string }> | undefined) ?? []) {
+        found.push(toStream(u, tabId, r.frameId ?? 0, ref));
+      }
     }
     if (found.length) await onDetected(tabId, found);
   } catch {
-    /* injection blocked (e.g. chrome:// page) — fall through to stored */
+    /* injection blocked (e.g. chrome:// page) — fall through to whatever is stored */
   }
   return dedupeAndRank(await getStreams(tabId));
+}
+
+async function handle(
+  msg: Message,
+  sender: { tab?: { id?: number } },
+): Promise<StreamsResponse | PlaybackResponse | OkResponse> {
+  switch (msg.type) {
+    case 'DETECT':
+      return { streams: await detectActiveTab(msg.tabId) };
+
+    case 'GET_STREAMS':
+      return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
+
+    case 'OPEN_PLAYER': {
+      const tab = await browser.tabs.create({
+        url: browser.runtime.getURL('/player.html') + '#src=' + encodeURIComponent(msg.stream.manifestUrl),
+      });
+      if (tab.id != null) await browser.storage.session.set({ [playbackKey(tab.id)]: msg.stream });
+      return { ok: true };
+    }
+
+    case 'GET_PLAYBACK': {
+      const tabId = sender.tab?.id;
+      if (tabId == null) return { stream: null };
+      const key = playbackKey(tabId);
+      const got = await browser.storage.session.get(key);
+      const stream = (got[key] as CapturedStream | undefined) ?? null;
+      if (stream) {
+        const headers = effectiveHeaders(stream);
+        // Install BEFORE responding so headers are live before the player's first fetch.
+        if (hasAnyHeader(headers)) await injector.apply(tabId, headers);
+      }
+      return { stream };
+    }
+  }
 }
 
 export default defineBackground(() => {
@@ -103,28 +161,20 @@ export default defineBackground(() => {
     { urls: ['<all_urls>'], types: ['xmlhttprequest', 'media', 'other'] },
   );
 
-  browser.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
-    void (async (): Promise<StreamsResponse | { ok: true }> => {
-      switch (msg.type) {
-        case 'DETECT':
-          return { streams: await detectActiveTab(msg.tabId) };
-        case 'GET_STREAMS':
-          return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
-        case 'OPEN_PLAYER':
-          await browser.tabs.create({
-            url: browser.runtime.getURL('/player.html') + '#src=' + encodeURIComponent(msg.url),
-          });
-          return { ok: true };
-      }
-    })().then(sendResponse);
+  browser.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
+    void handle(msg, sender).then(sendResponse);
     return true; // async response
   });
 
-  // Reset per-tab streams on navigation + tab close.
+  // Reset per-tab detection on navigation; tear everything down on tab close.
   browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status === 'loading' && changeInfo.url) {
       void clearTab(tabId).then(() => setBadge(tabId, 0));
     }
   });
-  browser.tabs.onRemoved.addListener((tabId) => void clearTab(tabId));
+  browser.tabs.onRemoved.addListener((tabId) => {
+    void clearTab(tabId);
+    void injector.clear(tabId);
+    void browser.storage.session.remove(playbackKey(tabId));
+  });
 });

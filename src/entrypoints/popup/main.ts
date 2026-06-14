@@ -48,8 +48,21 @@ function render(streams: CapturedStream[]): void {
     btn.type = 'button';
     btn.textContent = 'Watch';
     btn.addEventListener('click', () => {
-      void send({ type: 'OPEN_PLAYER', url: s.manifestUrl });
-      window.close();
+      // Request host access for this stream's CDN inside the user gesture (no-op if already
+      // granted via the passive toggle), so Phase 3 header injection can act on it. Then open.
+      let origins: string[] = [];
+      try {
+        const u = new URL(s.manifestUrl);
+        origins = [`${u.protocol}//${u.host}/*`];
+      } catch {
+        /* not a URL */
+      }
+      const open = (): void => {
+        void send({ type: 'OPEN_PLAYER', stream: s });
+        window.close();
+      };
+      if (origins.length) void browser.permissions.request({ origins }).then(open, open);
+      else open();
     });
 
     li.append(label, btn);
