@@ -17,6 +17,7 @@
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
     "build:edge": "wxt build -b edge",
+    "build:debug": "wxt build --mode development",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "icons": "node scripts/gen-icons.mjs",
@@ -30,6 +31,7 @@
     "check": "pnpm compile && pnpm lint && pnpm test && pnpm build && pnpm build:firefox && pnpm build:edge && pnpm size && pnpm audit:code && pnpm lint:ext",
     "verify": "wxt build && node scripts/verify.mjs",
     "verify:firefox": "wxt build -b firefox && node scripts/verify-firefox.mjs",
+    "verify:fixtures": "wxt build && node scripts/verify-fixtures.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

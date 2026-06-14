@@ -19,6 +19,21 @@ bundle budget · no-remote-code audit · web-ext lint.
 Live smokes (need the browsers installed locally; also run in CI):
 - `pnpm verify` — Chromium via Playwright: real playback + detect + header rule + failover.
 - `pnpm verify:firefox` — Firefox via Selenium + geckodriver: playback in Gecko + popup.
+- `pnpm verify:fixtures` — Chromium: the real extension + its built deep-capture hook against local
+  fixtures replicating hostile delivery/concealment patterns (a detection matrix · VOD/live/failover
+  playback · Referer-gating). Server + committed test media live in `tests/fixtures/`.
+
+## Debugging on a real site
+`pnpm build:debug` (or `pnpm dev`) produces a development build with diagnostics compiled in
+(MODE=development; production builds strip all of it via `src/core/debug.ts`). Load
+`.output/chrome-mv3-dev` unpacked (or run `pnpm dev`), then on any page:
+- the **popup** shows a 🔧 panel: every detected stream, which capture layer found it
+  (`scan` / `passive` / `deep`), its kind, and whether all-sites (passive + deep-capture) is granted.
+- the **player** logs the hls.js failure *class* to the console for a failed source — e.g.
+  "HTTP 403 — gated (Referer/Origin/cookie)", "manifest load failed — CORS/host not granted",
+  "media/decode error — DRM cannot play" — so you can tell *why* a real stream didn't play.
+Each failure class maps to a fixture in `tests/fixtures/`, so an in-the-wild failure becomes a
+reproducible regression test.
 
 ## Where things live
 - **Pure, unit-tested logic** → `src/core/` (detection/dedupe/ranking, the failover state machine,

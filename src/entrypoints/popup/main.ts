@@ -3,6 +3,7 @@ import { browser } from 'wxt/browser';
 import type { CapturedStream } from '@/core/types';
 import type { Message, StreamsResponse } from '@/core/messages';
 import { t } from '@/core/i18n';
+import { DEBUG, dlog } from '@/core/debug';
 
 const listEl = document.getElementById('list') as HTMLUListElement;
 const emptyEl = document.getElementById('empty') as HTMLDivElement;
@@ -65,8 +66,32 @@ function renderEmpty(): void {
   }
 }
 
+/** Debug-build inspector: what was detected, from which capture layer, and whether the passive +
+ *  deep-capture layers are armed (all-sites grant). Created lazily; absent from production builds. */
+async function renderDebug(streams: CapturedStream[]): Promise<void> {
+  if (!DEBUG) return;
+  let panel = document.getElementById('debug');
+  if (!panel) {
+    panel = document.createElement('section');
+    panel.id = 'debug';
+    panel.style.cssText =
+      'margin-top:8px;padding:8px 12px;border-top:1px dashed #999;font:11px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;opacity:.8';
+    (document.getElementById('app') ?? document.body).append(panel);
+  }
+  const allSites = await browser.permissions.contains(ALL_SITES).catch(() => false);
+  const lines = [
+    '🔧 debug build',
+    `all-sites (passive + deep-capture): ${allSites ? 'granted' : 'off'}`,
+    `detected on this tab: ${streams.length}`,
+    ...streams.map((s) => `  [${s.source ?? '?'}|${s.kind ?? '?'}] ${hostOf(s.manifestUrl)}${pathOf(s.manifestUrl)}`),
+  ];
+  if (!streams.length) lines.push('  (DOM scan runs on "Find streams"; passive + deep-capture need all-sites)');
+  panel.textContent = lines.join('\n');
+}
+
 function render(streams: CapturedStream[]): void {
   current = streams;
+  void renderDebug(streams);
   listEl.replaceChildren();
   if (!streams.length) {
     renderEmpty();
@@ -135,6 +160,7 @@ async function refresh(detect: boolean): Promise<void> {
     return;
   }
   const res = await send<StreamsResponse>({ type: detect ? 'DETECT' : 'GET_STREAMS', tabId: currentTabId });
+  dlog('popup', detect ? 'scan' : 'get', '→', res.streams?.length ?? 0, 'stream(s) on tab', currentTabId);
   if (detect) scanned = true;
   render(res.streams ?? []);
 }

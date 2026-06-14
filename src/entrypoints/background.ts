@@ -18,6 +18,7 @@ import type { ErrorResponse, Message, OkResponse, PlaybackResponse, StreamsRespo
 import { createHeaderInjector } from '@/core/header-injector';
 import { safeHttpUrl } from '@/core/url-safety';
 import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
+import { dlog } from '@/core/debug';
 
 const injector = createHeaderInjector();
 const playbackKey = (tabId: number): string => `playback:${tabId}`;
@@ -58,6 +59,7 @@ function toStream(
   frameId: number,
   pageUrl: string,
   headers?: ReplayHeaders,
+  source?: CapturedStream['source'],
 ): CapturedStream {
   return {
     key: canonicalKey(url),
@@ -67,6 +69,7 @@ function toStream(
     pageUrl,
     replayHeaders: headers ?? {},
     kind: classifyByUrl(url),
+    source,
     createdAt: Date.now(),
   };
 }
@@ -129,7 +132,7 @@ const onSendHeaders = (d: {
   if (d.tabId < 0 || !isManifestUrl(d.url)) return;
   const headers = mapHeaders(d.requestHeaders);
   const pageUrl = headers.referer ?? d.initiator ?? d.documentUrl ?? '';
-  void onDetected(d.tabId, [toStream(d.url, d.tabId, d.frameId, pageUrl, headers)]);
+  void onDetected(d.tabId, [toStream(d.url, d.tabId, d.frameId, pageUrl, headers, 'passive')]);
 };
 
 let passiveAttached = false;
@@ -178,8 +181,10 @@ async function syncDeepCapture(): Promise<void> {
   if (!granted) return;
   try {
     await sc.registerContentScripts?.([
-      { id: 'cs-deep-relay', js: ['content-scripts/deep-relay.js'], matches: ['<all_urls>'], runAt: 'document_start', allFrames: true },
-      { id: 'cs-deep-main', js: ['content-scripts/deep-main.js'], matches: ['<all_urls>'], runAt: 'document_start', allFrames: true, world: 'MAIN' },
+      // matchOriginAsFallback extends capture into opaque-origin frames (srcdoc / about:blank / data:)
+      // that hostile pages use to bury the real player — plain allFrames doesn't reach those.
+      { id: 'cs-deep-relay', js: ['content-scripts/deep-relay.js'], matches: ['<all_urls>'], runAt: 'document_start', allFrames: true, matchOriginAsFallback: true },
+      { id: 'cs-deep-main', js: ['content-scripts/deep-main.js'], matches: ['<all_urls>'], runAt: 'document_start', allFrames: true, world: 'MAIN', matchOriginAsFallback: true },
     ]);
   } catch {
     /* registration unsupported / races a concurrent sync */
@@ -197,6 +202,7 @@ async function setBadge(tabId: number, count: number): Promise<void> {
 
 async function onDetected(tabId: number, streams: CapturedStream[]): Promise<CapturedStream[]> {
   const merged = await addStreams(tabId, streams);
+  dlog('captured', streams.map((s) => `${s.source ?? '?'}:${s.kind ?? '?'} ${s.manifestUrl}`), '→ tab', tabId, 'has', merged.length);
   await setBadge(tabId, merged.length);
   return merged;
 }
@@ -210,7 +216,7 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
     const found: CapturedStream[] = [];
     for (const r of results) {
       for (const { u, ref } of (r.result as Array<{ u: string; ref: string }> | undefined) ?? []) {
-        found.push(toStream(u, tabId, r.frameId ?? 0, ref));
+        found.push(toStream(u, tabId, r.frameId ?? 0, ref, undefined, 'scan'));
       }
     }
     if (found.length) await onDetected(tabId, found);
@@ -304,7 +310,7 @@ async function handle(
       // From the deep-capture content script (a page-world hook); validate before trusting.
       const tabId = sender.tab?.id;
       if (tabId == null || !isManifestUrl(msg.url) || !safeHttpUrl(msg.url)) return { ok: true };
-      void onDetected(tabId, [toStream(msg.url, tabId, sender.frameId ?? 0, msg.pageUrl)]);
+      void onDetected(tabId, [toStream(msg.url, tabId, sender.frameId ?? 0, msg.pageUrl, undefined, 'deep')]);
       return { ok: true };
     }
     default:

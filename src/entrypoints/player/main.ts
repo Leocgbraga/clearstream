@@ -11,6 +11,7 @@ import { safeHttpUrl } from '@/core/url-safety';
 import { classifyManifestBody, scoreStream } from '@/core/detection';
 import { loadVolume, saveVolume } from '@/core/prefs';
 import { t } from '@/core/i18n';
+import { dlog } from '@/core/debug';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 const controller = document.getElementById('controller') as HTMLElement;
@@ -199,6 +200,7 @@ async function start(): Promise<void> {
         currentIndex = st.index;
         sourcesSel.value = String(st.index);
         if (st.failed) {
+          dlog('all', streams.length, 'source(s) failed — see the hls.js error class logged above');
           setStatus('');
           showOverlay({
             msg: t('allFailed'),
@@ -210,6 +212,7 @@ async function start(): Promise<void> {
         }
       },
       onHealthy: (i: number) => {
+        dlog('playing source', i, streams[i]?.manifestUrl);
         currentIndex = i;
         hideOverlay();
         setTitle(hostOf(streams[i]!.manifestUrl));

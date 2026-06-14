@@ -7,6 +7,7 @@ import Hls from 'hls.js';
 import type { Level } from 'hls.js';
 import { createLivePLoader } from './endlist-loader';
 import { safeHttpUrl } from '@/core/url-safety';
+import { DEBUG, dlog, failureClass } from '@/core/debug';
 
 export interface PlayerHandle {
   hls?: Hls;
@@ -81,7 +82,16 @@ export function createPlayer(
     });
 
     if (opts.onFragLoaded) hls.on(Hls.Events.FRAG_LOADED, () => opts.onFragLoaded?.());
-    if (opts.onError) hls.on(Hls.Events.ERROR, (_e, data) => opts.onError?.(data));
+    if (opts.onError || DEBUG)
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (DEBUG)
+          dlog(
+            'hls.js error:',
+            failureClass(data as unknown as { type?: string; details?: string; response?: { code?: number } }),
+            { fatal: data.fatal, type: data.type, details: data.details },
+          );
+        opts.onError?.(data);
+      });
 
     hls.loadSource(src);
     hls.attachMedia(video);

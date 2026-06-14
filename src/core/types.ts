@@ -25,5 +25,7 @@ export interface CapturedStream {
   kind?: ManifestKind;
   /** Ranking score for auto-pick (master > media > ad-stub). */
   score?: number;
+  /** Which capture layer first saw this stream — surfaced by debug builds. */
+  source?: 'scan' | 'passive' | 'deep';
   createdAt: number;
 }
