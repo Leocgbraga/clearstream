@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-const targets = ['.output/chrome-mv3', '.output/firefox-mv3'].map((d) => path.resolve(d));
+const targets = ['.output/chrome-mv3', '.output/firefox-mv3', '.output/edge-mv3'].map((d) => path.resolve(d));
 
 const RULES = [
   { name: 'eval()', re: /\beval\s*\(/g, ext: ['.js'] },

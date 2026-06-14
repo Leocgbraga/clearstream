@@ -21,7 +21,7 @@
     "audit:code": "node scripts/audit-no-remote-code.mjs",
     "lint": "eslint .",
     "lint:ext": "web-ext lint --source-dir .output/firefox-mv3 --no-config-discovery",
-    "check": "pnpm compile && pnpm lint && pnpm test && pnpm build && pnpm build:firefox && pnpm size && pnpm audit:code && pnpm lint:ext",
+    "check": "pnpm compile && pnpm lint && pnpm test && pnpm build && pnpm build:firefox && pnpm build:edge && pnpm size && pnpm audit:code && pnpm lint:ext",
     "verify": "wxt build && node scripts/verify.mjs",
     "verify:firefox": "wxt build -b firefox && node scripts/verify-firefox.mjs",
     "postinstall": "wxt prepare"

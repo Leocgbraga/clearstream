@@ -24,6 +24,13 @@ must match the `package.json` version (`npm version` guarantees this).
 For Chrome power users, "load unpacked" the unzipped `chrome` build. For Firefox, the AMO-signed
 `.xpi` (once AMO is configured) installs directly; unsigned builds load via `about:debugging`.
 
+## Before your first store submission (one-time gates)
+- **Privacy policy URL (required by all three stores):** host `PRIVACY.md` at a live `https://`
+  URL — GitHub Pages, the repo's `PRIVACY.md` blob/raw link, or any static host — and paste that
+  URL into each store dashboard (Chrome, Edge, AMO). The copy in `store/` references `PRIVACY.md`;
+  the stores need a resolvable URL, not a repo-relative path. Do this before the first manual upload.
+- **Data collection:** declare **none** — the extension sends nothing off-device.
+
 ## Wiring up store publishing (optional)
 Add these as repository secrets (Settings → Secrets and variables → Actions). The `release`
 environment can also gate publishing behind a manual approval (Settings → Environments → release).
