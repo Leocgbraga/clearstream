@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# WXT / build output
+.output/
+.wxt/
+dist/
+*.zip
+*.xpi
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
