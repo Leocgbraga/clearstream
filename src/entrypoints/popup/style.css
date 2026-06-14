@@ -3,21 +3,74 @@
 }
 body {
   margin: 0;
-  min-width: 300px;
-  font: 14px/1.45 system-ui, -apple-system, sans-serif;
+  width: 320px;
+  font: 13px/1.45 system-ui, -apple-system, sans-serif;
   background: #0b0f0e;
   color: #e6e6e6;
 }
 main {
-  padding: 14px 16px;
+  padding: 12px 14px 14px;
 }
 h1 {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 15px;
   font-weight: 600;
   color: #14b8a6;
 }
-#status {
-  margin: 0;
+ul {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  background: #121817;
+  border: 1px solid #1e2a28;
+  border-radius: 8px;
+}
+.url {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#empty {
+  margin: 0 0 10px;
   color: #9aa3a1;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  color: #04211d;
+  background: #14b8a6;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-weight: 600;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+#scan {
+  width: 100%;
+}
+#passiveRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #1e2a28;
+  color: #c7cecc;
+}
+#passiveRow em {
+  color: #9aa3a1;
+  font-style: normal;
 }

@@ -23,7 +23,9 @@ export default defineConfig({
       description:
         'Detects HLS (.m3u8) streams on the page and plays them in a clean, ad-free player. ' +
         'No YouTube, no DRM. You are responsible for ensuring you may access any stream detected.',
-      permissions: ['declarativeNetRequest', 'storage', 'activeTab', 'scripting'] as string[],
+      // webRequest = optional passive detection/header-capture (inert until host access granted);
+      // declarativeNetRequest = header injection (Phase 3). Neither adds a host warning at install.
+      permissions: ['webRequest', 'declarativeNetRequest', 'storage', 'activeTab', 'scripting'] as string[],
       optional_host_permissions: ['*://*/*'],
       host_permissions: [] as string[],
     };
@@ -32,7 +34,7 @@ export default defineConfig({
       return {
         ...base,
         // Firefox header-injection backend = blocking webRequest (its DNR domain conditions are buggy).
-        permissions: [...base.permissions, 'webRequest', 'webRequestBlocking'],
+        permissions: [...base.permissions, 'webRequestBlocking'],
         browser_specific_settings: {
           gecko: {
             id: 'clearstream@daedastream.dev',

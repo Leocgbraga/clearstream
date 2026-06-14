@@ -1,19 +1,38 @@
 import './style.css';
-// media-chrome registers the <media-controller> + control-bar custom elements (bundled, no remote code).
+// media-chrome registers the controls + rendition (quality) menu custom elements (bundled).
 import 'media-chrome';
-// menu module registers <media-rendition-menu> / <media-rendition-menu-button> (the quality selector).
 import 'media-chrome/menu';
+import Hls from 'hls.js';
 
-// Phase 0/1: the player shell + controls render. Phase 2 wires hls.js here:
-//  - custom pLoader strips #EXT-X-ENDLIST each poll (live-ify)
-//  - header injection via DNR session rules (Chrome) / blocking webRequest (Firefox)
-//  - populate media-chrome renditions from hls.levels; auto-failover state machine
-// See docs/research/07-player-engine.md.
-const params = new URLSearchParams(location.hash.slice(1));
-const src = params.get('src');
-const hint = document.getElementById('hint');
-if (hint) {
-  hint.textContent = src
-    ? `Controls ready (media-chrome). Phase 2 will play: ${src}`
-    : 'Open this from the popup with a detected stream. Phase 2 adds hls.js playback.';
+// Phase 1: basic playback so detect→Watch works end-to-end on CORS-open streams.
+// Phase 2 adds the custom pLoader (live ENDLIST-strip), Phase 3 header injection (DNR/webRequest)
+// and hls.levels→media-chrome rendition wiring + auto-failover. See docs/research/07-player-engine.md.
+const video = document.getElementById('video') as HTMLVideoElement;
+const hint = document.getElementById('hint') as HTMLParagraphElement;
+const src = new URLSearchParams(location.hash.slice(1)).get('src');
+
+function setHint(text: string): void {
+  hint.textContent = text;
+  hint.hidden = !text;
+}
+
+if (!src) {
+  setHint('Open this from the ClearStream popup with a detected stream.');
+} else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+  // Native HLS (Safari) — no loader hook, but plays directly.
+  video.src = src;
+  setHint('');
+} else if (Hls.isSupported()) {
+  const hls = new Hls();
+  hls.loadSource(src);
+  hls.attachMedia(video);
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    setHint('');
+    void video.play().catch(() => {});
+  });
+  hls.on(Hls.Events.ERROR, (_evt, data) => {
+    if (data.fatal) setHint(`Playback error (${data.type}: ${data.details}). Phase 3 adds header injection for protected CDNs.`);
+  });
+} else {
+  setHint('This browser cannot play HLS (no MSE support).');
 }
