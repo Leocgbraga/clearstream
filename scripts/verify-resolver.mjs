@@ -52,11 +52,45 @@ try {
   // The resolver opened + closed its own background tab; the page count should be back to baseline.
   results.tabCleanup = { ok: after <= before, before, after };
 
+  // Harvest path: open an aggregator "links" page and resolve it WITHOUT explicit urls. The resolver must
+  // scan the page DOM (all frames), rank the mirror links (dropping social/nav noise), open each in a
+  // hidden tab, capture every .m3u8, master-probe + rank — and the master mirror must win. Meanwhile the
+  // popunder mirror's window.open is suppressed, so no orphan ad tab leaks.
+  const linksUrl = `${srv.urls.PAGES}/fixtures/links`;
+  const linksPage = await ctx.newPage();
+  await linksPage.goto(linksUrl);
+  const linksTabId = await sw.evaluate(
+    (u) => chrome.tabs.query({}).then((tabs) => tabs.find((t) => t.url === u)?.id ?? -1),
+    linksUrl,
+  );
+  const hBefore = ctx.pages().length;
+  const hRes = await popup.evaluate((tabId) => chrome.runtime.sendMessage({ type: 'RESOLVE_PAGE', tabId }), linksTabId);
+  const hAfter = ctx.pages().length;
+  const hStreams = hRes?.streams ?? [];
+  const top = hStreams[0]?.manifestUrl ?? '';
+  results.harvest = {
+    ok: hStreams.length > 0 && /\.m3u8(\?|#|$)/i.test(top),
+    masterWon: hStreams[0]?.kind === 'master' || /master\.m3u8/i.test(top),
+    count: hStreams.length,
+    top,
+  };
+  // All resolver-opened tabs closed AND the popunder suppressed → page count back to the pre-resolve
+  // baseline. A leaked ad tab (suppression failure) would push hAfter above hBefore.
+  results.harvestCleanup = { ok: hAfter <= hBefore, before: hBefore, after: hAfter };
+
   console.log('\n=== RESOLVER ===');
   console.log(`  ${results.single.ok ? '✓' : '✗'} resolve embed → m3u8        ${JSON.stringify(results.single)}`);
   console.log(`  ${results.tabCleanup.ok ? '✓' : '✗'} resolver tab cleaned up     ${JSON.stringify(results.tabCleanup)}`);
+  console.log(`  ${results.harvest.ok ? '✓' : '✗'} harvest links → m3u8        ${JSON.stringify(results.harvest)}`);
+  console.log(`  ${results.harvest.masterWon ? '✓' : '✗'} master mirror ranked first  ${JSON.stringify({ top: results.harvest.top })}`);
+  console.log(`  ${results.harvestCleanup.ok ? '✓' : '✗'} popunder suppressed/cleaned ${JSON.stringify(results.harvestCleanup)}`);
 
-  const allOk = results.single.ok && results.tabCleanup.ok;
+  const allOk =
+    results.single.ok &&
+    results.tabCleanup.ok &&
+    results.harvest.ok &&
+    results.harvest.masterWon &&
+    results.harvestCleanup.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);
   process.exitCode = allOk ? 0 : 1;
 } finally {

@@ -141,6 +141,34 @@ const FIXTURES = {
       `<video id=v muted></video>${hls}<script>var h=new Hls();h.loadSource(${JSON.stringify(`${CDN}/gated/referer/manifest.m3u8`)});h.attachMedia(document.getElementById('v'));h.on(Hls.Events.MANIFEST_PARSED,function(){document.getElementById('v').play();});</script>`,
     ),
 
+  // --- E. multi-mirror harvest (POWER resolver) ---
+  // A typical aggregator "links" page: several event mirrors (each a distinct embed page that loads a
+  // stream) plus social/nav noise. The resolver harvests these, opens each in a hidden tab, and captures
+  // the .m3u8 each one loads. Mix of: a master mirror, a variant mirror, a dead mirror, and a popunder
+  // mirror — so verify-resolver.mjs can prove harvest → rank → master-probe → ad-suppression end-to-end.
+  links: () =>
+    doc(
+      'links',
+      `<h1>Germany vs Curaçao — live</h1>
+       <a href="/fixtures/embed-b">Link 1 HD</a>
+       <a href="/fixtures/embed-a">Server 2 SD</a>
+       <a href="/fixtures/embed-dead">Mirror 3 Live</a>
+       <a href="/fixtures/embed-popunder">Watch Link 4</a>
+       <a href="https://facebook.com/share/x">Share on Facebook</a>
+       <a href="/about-us">About Us</a>
+       <a href="/contact">Contact</a>`,
+    ),
+  'embed-a': () => doc('embed-a', `<script>fetch(${JSON.stringify(LO)});</script>`), // variant mirror
+  'embed-b': () => doc('embed-b', `<script>fetch(${JSON.stringify(M3U8)});</script>`), // master mirror (should win)
+  'embed-dead': () => doc('embed-dead', `<h1>no stream here</h1>`), // dead mirror — resolves to nothing
+  // Popunder mirror: fires window.open (deferred, so the document_start neutralizer reliably wins the
+  // race) AND loads the real stream. The harness asserts no orphan ad tab leaks → suppression worked.
+  'embed-popunder': () =>
+    doc(
+      'embed-popunder',
+      `<script>fetch(${JSON.stringify(LO)});setTimeout(function(){try{window.open(${JSON.stringify(`${AD}/ad`)},'_blank');}catch(e){}},150);</script>`,
+    ),
+
   // --- helpers used by the iframe fixtures (served from any origin) ---
   _leaf: () => doc('_leaf', `<script>var u=new URLSearchParams(location.search).get('u');if(u)fetch(u);</script>`),
   _nest: () =>

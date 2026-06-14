@@ -21,6 +21,8 @@ import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
 import { dlog } from '@/core/debug';
 import { POWER } from '@/core/power';
 import { resolveInTab, type AwaitCapture } from '@/core/resolver/resolve-tab';
+import { rankMirrorCandidates } from '@/core/resolver/harvest';
+import { deriveMasterCandidates, isMasterPlaylist } from '@/core/resolver/master-probe';
 
 const injector = createHeaderInjector();
 const playbackKey = (tabId: number): string => `playback:${tabId}`;
@@ -245,7 +247,57 @@ async function resolveMirrors(urls: string[]): Promise<CapturedStream[]> {
     }
   };
   await Promise.all(Array.from({ length: Math.min(POOL, list.length) || 1 }, worker));
-  return dedupeAndRank(all);
+  return probeMaster(dedupeAndRank(all));
+}
+
+// Harvest the page's mirror/embed candidates: DOM scan via scripting (all frames) → pure ranking.
+function scanForMirrors(): { links: { href: string; text: string }[]; iframes: string[] } {
+  const links = [...document.querySelectorAll('a[href]')].map((a) => ({
+    href: (a as HTMLAnchorElement).href,
+    text: (a.textContent ?? '').trim().slice(0, 80),
+  }));
+  const iframes = [...document.querySelectorAll('iframe[src]')].map((f) => (f as HTMLIFrameElement).src);
+  return { links, iframes };
+}
+
+async function harvestTab(tabId: number): Promise<string[]> {
+  try {
+    const results = await browser.scripting.executeScript({ target: { tabId, allFrames: true }, func: scanForMirrors });
+    const links: { href: string; text: string }[] = [];
+    const iframes: string[] = [];
+    for (const r of results) {
+      const v = r.result as { links: { href: string; text: string }[]; iframes: string[] } | undefined;
+      if (v) {
+        links.push(...v.links);
+        iframes.push(...v.iframes);
+      }
+    }
+    const tab = await browser.tabs.get(tabId);
+    const urls = rankMirrorCandidates({ links, iframes, pageUrl: tab.url ?? '' });
+    dlog('resolver: harvested', urls.length, 'candidate(s) from tab', tabId);
+    return urls;
+  } catch {
+    return [];
+  }
+}
+
+// If the best result is only a variant, probe its sibling master playlists and prefer a real master.
+async function probeMaster(streams: CapturedStream[]): Promise<CapturedStream[]> {
+  const top = streams[0];
+  if (!top || top.kind === 'master') return streams;
+  for (const cand of deriveMasterCandidates(top.manifestUrl).slice(0, 4)) {
+    try {
+      const res = await fetch(cand, { signal: AbortSignal.timeout(4000) });
+      if (res.ok && isMasterPlaylist((await res.text()).slice(0, 65_536))) {
+        const master: CapturedStream = { ...top, key: canonicalKey(cand), manifestUrl: cand, kind: 'master' };
+        dlog('resolver: master-probe found', cand);
+        return dedupeAndRank([master, ...streams]);
+      }
+    } catch {
+      /* not a master / blocked / timeout */
+    }
+  }
+  return streams;
 }
 
 async function onDetected(tabId: number, streams: CapturedStream[]): Promise<CapturedStream[]> {
@@ -311,9 +363,9 @@ async function handle(
       return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
 
     case 'RESOLVE_PAGE':
-      // POWER only: render the page's mirror/embed candidates in hidden tabs, return what resolves.
-      // (P3 fills `urls` from a DOM harvest when omitted.) Folds to [] in store builds → tree-shaken.
-      return POWER ? { streams: await resolveMirrors(msg.urls ?? []) } : { streams: [] };
+      // POWER only: harvest the page's mirror/embed candidates (or use provided urls), render each in a
+      // hidden tab, return what resolves. Folds to [] in store builds → tree-shaken.
+      return POWER ? { streams: await resolveMirrors(msg.urls ?? (await harvestTab(msg.tabId))) } : { streams: [] };
 
     case 'OPEN_PLAYER': {
       // Reject any non-http(s) manifest URL before it can reach the player / header injection.
