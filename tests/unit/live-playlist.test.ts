@@ -23,4 +23,13 @@ describe('makeLive', () => {
     const t = '#EXTM3U\n#EXTINF:6,\nseg1.ts\n';
     expect(makeLive(t)).toBe(t);
   });
+  it('respects a long VOD list from media-sequence 0 even without PLAYLIST-TYPE', () => {
+    const segs = Array.from({ length: 25 }, (_, i) => `#EXTINF:6,\nseg${i}.ts`).join('\n');
+    const vod = `#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n${segs}\n#EXT-X-ENDLIST\n`;
+    expect(makeLive(vod)).toBe(vod);
+  });
+  it('strips ENDLIST from a short rolling window (broken-live) without PLAYLIST-TYPE', () => {
+    const live = '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1200\n#EXTINF:6,\nseg1.ts\n#EXTINF:6,\nseg2.ts\n#EXT-X-ENDLIST\n';
+    expect(makeLive(live)).not.toContain('#EXT-X-ENDLIST');
+  });
 });

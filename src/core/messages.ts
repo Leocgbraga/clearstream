@@ -7,7 +7,8 @@ export type Message =
   | { type: 'OPEN_PLAYER'; streams: CapturedStream[] } // popup → bg: open the player with a ranked mirror list
   | { type: 'GET_PLAYBACK' } // player → bg: fetch its tab's mirror list
   | { type: 'PREPARE_MIRROR'; index: number } // player → bg: install header injection for mirror N before it plays
-  | { type: 'REMEMBER_WORKING'; index: number }; // player → bg: mirror N is playing healthily, persist its headers
+  | { type: 'REMEMBER_WORKING'; index: number } // player → bg: mirror N is playing healthily, persist its headers
+  | { type: 'CONTENT_STREAM'; url: string; pageUrl: string }; // deep-capture content script → bg: found an .m3u8
 
 export interface StreamsResponse {
   streams: CapturedStream[];

@@ -3,6 +3,7 @@ import {
   isManifestUrl,
   canonicalKey,
   classifyByUrl,
+  classifyManifestBody,
   scoreStream,
   dedupeAndRank,
 } from '@/core/detection';
@@ -50,13 +51,20 @@ describe('canonicalKey', () => {
 });
 
 describe('classifyByUrl', () => {
-  it('flags master-ish names as master, else unknown', () => {
+  it('uses URL hints; media signals win (chunklist is media, not master)', () => {
     expect(classifyByUrl('https://x/master.m3u8')).toBe('master');
-    expect(classifyByUrl('https://x/playlist.m3u8')).toBe('master');
-    expect(classifyByUrl('https://x/chunklist.m3u8')).toBe('master');
-    expect(classifyByUrl('https://x/index.m3u8')).toBe('master');
-    expect(classifyByUrl('https://x/manifest.mpd')).toBe('master');
+    expect(classifyByUrl('https://x/manifest.m3u8')).toBe('master');
+    expect(classifyByUrl('https://x/chunklist.m3u8')).toBe('media'); // Wowza media playlist
+    expect(classifyByUrl('https://x/playlist.m3u8')).toBe('unknown'); // ambiguous → body sniff
     expect(classifyByUrl('https://x/video_720.m3u8')).toBe('unknown');
+  });
+});
+
+describe('classifyManifestBody', () => {
+  it('master with #EXT-X-STREAM-INF, media with #EXTINF, else unknown', () => {
+    expect(classifyManifestBody('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8')).toBe('master');
+    expect(classifyManifestBody('#EXTM3U\n#EXTINF:6,\nseg.ts')).toBe('media');
+    expect(classifyManifestBody('#EXTM3U\n#EXT-X-VERSION:3')).toBe('unknown');
   });
 });
 

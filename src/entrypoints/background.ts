@@ -151,6 +151,41 @@ function rearmPassive(): void {
   passiveAttached = true;
 }
 
+// Deep-capture content scripts (Chromium MAIN-world fetch/XHR hook + ISOLATED relay). Runtime-
+// registered ONLY while the user holds all-sites access (so they add no install warning) and
+// unregistered when revoked. Firefox doesn't support MAIN-world content scripts → no-op there.
+async function syncDeepCapture(): Promise<void> {
+  if (import.meta.env.FIREFOX) return;
+  const sc = browser.scripting as typeof browser.scripting & {
+    getRegisteredContentScripts?: (f?: { ids?: string[] }) => Promise<Array<{ id: string }>>;
+    registerContentScripts?: (s: unknown[]) => Promise<void>;
+    unregisterContentScripts?: (f: { ids: string[] }) => Promise<void>;
+  };
+  if (!sc.registerContentScripts) return;
+  const ids = ['cs-deep-relay', 'cs-deep-main'];
+  let granted = false;
+  try {
+    granted = await browser.permissions.contains({ origins: ['<all_urls>'] });
+  } catch {
+    /* */
+  }
+  try {
+    const existing = (await sc.getRegisteredContentScripts?.({ ids })) ?? [];
+    if (existing.length) await sc.unregisterContentScripts?.({ ids });
+  } catch {
+    /* */
+  }
+  if (!granted) return;
+  try {
+    await sc.registerContentScripts?.([
+      { id: 'cs-deep-relay', js: ['content-scripts/deep-relay.js'], matches: ['<all_urls>'], runAt: 'document_start', allFrames: true },
+      { id: 'cs-deep-main', js: ['content-scripts/deep-main.js'], matches: ['<all_urls>'], runAt: 'document_start', allFrames: true, world: 'MAIN' },
+    ]);
+  } catch {
+    /* registration unsupported / races a concurrent sync */
+  }
+}
+
 async function setBadge(tabId: number, count: number): Promise<void> {
   try {
     await browser.action.setBadgeText({ tabId, text: count ? String(count) : '' });
@@ -187,7 +222,7 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
 
 async function handle(
   msg: Message,
-  sender: { tab?: { id?: number }; url?: string },
+  sender: { tab?: { id?: number }; url?: string; frameId?: number },
 ): Promise<StreamsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
   // Playback messages install header rules / read stashed streams — only our own pages may send them
   // (defense in depth; today there's no externally_connectable/content script, but a content script
@@ -262,6 +297,13 @@ async function handle(
       }
       return { ok: true };
     }
+    case 'CONTENT_STREAM': {
+      // From the deep-capture content script (a page-world hook); validate before trusting.
+      const tabId = sender.tab?.id;
+      if (tabId == null || !isManifestUrl(msg.url) || !safeHttpUrl(msg.url)) return { ok: true };
+      void onDetected(tabId, [toStream(msg.url, tabId, sender.frameId ?? 0, msg.pageUrl)]);
+      return { ok: true };
+    }
     default:
       return { error: 'Unknown message type' };
   }
@@ -272,8 +314,15 @@ export default defineBackground(() => {
   // grant made after startup actually takes effect (Chrome won't retroactively match a pre-registered
   // listener to newly-granted hosts).
   rearmPassive();
-  browser.permissions.onAdded.addListener(() => rearmPassive());
-  browser.permissions.onRemoved.addListener(() => rearmPassive());
+  void syncDeepCapture();
+  browser.permissions.onAdded.addListener(() => {
+    rearmPassive();
+    void syncDeepCapture();
+  });
+  browser.permissions.onRemoved.addListener(() => {
+    rearmPassive();
+    void syncDeepCapture();
+  });
 
   browser.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
     // Always answer the port — including on rejection — so callers (player GET_PLAYBACK /

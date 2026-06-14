@@ -23,9 +23,19 @@ export function canonicalKey(url: string): string {
   }
 }
 
-/** URL-only hint. Real master/media split needs the manifest body (Phase 2). */
+/** URL-only hint (weak). Prefer classifyManifestBody when the manifest text is available. */
 export function classifyByUrl(url: string): ManifestKind {
-  if (/(master|playlist|index|chunklist|manifest)/i.test(url)) return 'master';
+  // chunklist is the Wowza convention for a MEDIA/variant playlist — check media signals first so it
+  // isn't mis-ranked above a real master.
+  if (/(chunklist|[/_.-]media[/_.-]|seg(ment)?[/_.-]|chunk[/_.-])/i.test(url)) return 'media';
+  if (/(master|manifest)/i.test(url)) return 'master';
+  return 'unknown';
+}
+
+/** Authoritative classification from the manifest body: #EXT-X-STREAM-INF ⇒ master, #EXTINF ⇒ media. */
+export function classifyManifestBody(text: string): ManifestKind {
+  if (/#EXT-X-STREAM-INF/i.test(text)) return 'master';
+  if (/#EXTINF/i.test(text)) return 'media';
   return 'unknown';
 }
 

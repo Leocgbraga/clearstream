@@ -1,0 +1,32 @@
+{
+  "extName": { "message": "ClearStream — Detector e reprodutor de HLS" },
+  "extDescription": {
+    "message": "Detecta transmissões HLS (.m3u8) na página e as reproduz em um player limpo e sem anúncios. Sem YouTube, sem DRM. Você é responsável por garantir que pode acessar qualquer transmissão detectada."
+  },
+  "scan": { "message": "Procurar transmissões nesta página" },
+  "scanning": { "message": "Procurando…" },
+  "autoDetect": { "message": "Detecção automática em todos os sites" },
+  "autoDetectHint": { "message": "(concede acesso aos sites)" },
+  "trust": { "message": "🔒 Funciona no seu dispositivo. Nenhum dado sai do seu navegador." },
+  "emptyInitial": { "message": "Nenhuma transmissão detectada nesta aba ainda." },
+  "emptyScanned": {
+    "message": "Nenhuma transmissão HLS encontrada. Alguns sites só carregam a transmissão depois que você dá play — tente isso e procure novamente."
+  },
+  "restricted": { "message": "O ClearStream não pode analisar esta página." },
+  "step1": { "message": "Dê play no vídeo." },
+  "step2": { "message": "Clique em Procurar transmissões abaixo." },
+  "step3": { "message": "Assista sem interrupções." },
+  "watch": { "message": "Assistir" },
+  "copy": { "message": "Copiar" },
+  "copied": { "message": "Copiado ✓" },
+  "best": { "message": "Melhor" },
+  "masterPlaylist": { "message": "playlist mestre" },
+  "connecting": { "message": "Conectando…" },
+  "switching": { "message": "Trocando de fonte…" },
+  "allFailed": { "message": "Todas as fontes falharam. A transmissão pode ter terminado ou expirado." },
+  "tryAgain": { "message": "Tentar de novo" },
+  "noStream": { "message": "Abra isto pelo menu do ClearStream com uma transmissão detectada." },
+  "tapForSound": { "message": "🔊 Toque para ativar o som" },
+  "copyUrl": { "message": "Copiar URL da transmissão" },
+  "shortcuts": { "message": "Espaço reproduzir · F tela cheia · M mudo · ← → avançar · P picture-in-picture" }
+}

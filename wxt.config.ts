@@ -19,10 +19,10 @@ export default defineConfig({
     // Detection runs via declarativeNetRequest (no host access needed); host access for a
     // specific CDN is requested at runtime when the user clicks "Watch".
     const base = {
-      name: 'ClearStream — HLS Stream Detector & Player',
-      description:
-        'Detects HLS (.m3u8) streams on the page and plays them in a clean, ad-free player. ' +
-        'No YouTube, no DRM. You are responsible for ensuring you may access any stream detected.',
+      // Localized via _locales (src/public/_locales/<lang>/messages.json); default_locale below.
+      name: '__MSG_extName__',
+      description: '__MSG_extDescription__',
+      default_locale: 'en',
       // webRequest = optional passive detection/header-capture (inert until host access granted);
       // declarativeNetRequest = header injection (Phase 3). Neither adds a host warning at install.
       permissions: ['webRequest', 'declarativeNetRequest', 'storage', 'activeTab', 'scripting'] as string[],

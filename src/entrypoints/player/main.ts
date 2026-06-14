@@ -8,7 +8,9 @@ import type { PlaybackResponse } from '@/core/messages';
 import { createFailoverController, type FailoverStatus } from '@/core/player/failover';
 import { createPlayer } from '@/core/player/hls-controller';
 import { safeHttpUrl } from '@/core/url-safety';
+import { classifyManifestBody, scoreStream } from '@/core/detection';
 import { loadVolume, saveVolume } from '@/core/prefs';
+import { t } from '@/core/i18n';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 const controller = document.getElementById('controller') as HTMLElement;
@@ -61,7 +63,39 @@ function hideOverlay(): void {
   overlay.hidden = true;
 }
 
+/** Body-sniff the top candidates to pick the real master when the URL hint is ambiguous. Bounded so
+ *  the common case (a master detected by URL) plays instantly; gated manifests just fall back. */
+async function refineRanking(streams: CapturedStream[]): Promise<CapturedStream[]> {
+  if (streams.length < 2 || streams[0]!.kind === 'master') return streams;
+  await Promise.all(
+    streams.slice(0, 4).map(async (s) => {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 1200);
+        const res = await fetch(s.manifestUrl, { signal: ctrl.signal, credentials: 'include' });
+        clearTimeout(t);
+        if (res.ok) {
+          const kind = classifyManifestBody(await res.text());
+          if (kind !== 'unknown') s.kind = kind;
+        }
+      } catch {
+        /* gated/slow manifest → keep the URL-based kind */
+      }
+    }),
+  );
+  return [...streams]
+    .map((s) => ({ ...s, score: scoreStream(s) }))
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+}
+
+function applyI18n(): void {
+  copyBtn.textContent = t('copyUrl');
+  unmuteBtn.textContent = t('tapForSound');
+  shortcuts.textContent = t('shortcuts');
+}
+
 async function start(): Promise<void> {
+  applyI18n();
   const fallback = safeHttpUrl(new URLSearchParams(location.hash.slice(1)).get('src'));
 
   // GET_PLAYBACK returns this tab's ranked mirror list (set by the popup's Watch).
@@ -83,9 +117,12 @@ async function start(): Promise<void> {
   }
   if (!streams.length) {
     setTitle('');
-    showOverlay({ msg: 'Open this from the ClearStream popup with a detected stream.' });
+    showOverlay({ msg: t('noStream') });
     return;
   }
+
+  showOverlay({ spin: true, msg: t('connecting') });
+  streams = await refineRanking(streams);
 
   setHint('');
   shortcuts.hidden = false;
@@ -98,8 +135,8 @@ async function start(): Promise<void> {
     const url = streams[currentIndex]?.manifestUrl ?? streams[0]!.manifestUrl;
     void navigator.clipboard.writeText(url).then(
       () => {
-        copyBtn.textContent = 'Copied ✓';
-        setTimeout(() => (copyBtn.textContent = 'Copy stream URL'), 1500);
+        copyBtn.textContent = t('copied');
+        setTimeout(() => (copyBtn.textContent = t('copyUrl')), 1500);
       },
       () => {},
     );
@@ -140,8 +177,6 @@ async function start(): Promise<void> {
     }
   });
 
-  showOverlay({ spin: true, msg: 'Connecting…' });
-
   const prepareMirror = (i: number): Promise<void> =>
     Promise.race([
       browser.runtime.sendMessage({ type: 'PREPARE_MIRROR', index: i }).then(() => undefined),
@@ -159,12 +194,12 @@ async function start(): Promise<void> {
         if (st.failed) {
           setStatus('');
           showOverlay({
-            msg: 'All sources failed. The stream may have ended or expired.',
-            action: { label: 'Try again', onClick: () => location.reload() },
+            msg: t('allFailed'),
+            action: { label: t('tryAgain'), onClick: () => location.reload() },
           });
         } else if (st.message) {
           setStatus(st.message); // a switch is happening
-          showOverlay({ spin: true, msg: 'Switching source…' });
+          showOverlay({ spin: true, msg: t('switching') });
         }
       },
       onHealthy: (i: number) => {

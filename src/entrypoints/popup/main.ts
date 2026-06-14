@@ -2,6 +2,7 @@ import './style.css';
 import { browser } from 'wxt/browser';
 import type { CapturedStream } from '@/core/types';
 import type { Message, StreamsResponse } from '@/core/messages';
+import { t } from '@/core/i18n';
 
 const listEl = document.getElementById('list') as HTMLUListElement;
 const emptyEl = document.getElementById('empty') as HTMLDivElement;
@@ -56,12 +57,10 @@ function renderEmpty(): void {
   listEl.hidden = true;
   emptyEl.hidden = false;
   if (restricted) {
-    emptyMsg.textContent = "ClearStream can't scan this page.";
+    emptyMsg.textContent = t('restricted');
     stepsEl.hidden = true;
   } else {
-    emptyMsg.textContent = scanned
-      ? 'No HLS stream found. Some sites only load the stream after you press play — try that, then scan again.'
-      : 'No stream detected on this tab yet.';
+    emptyMsg.textContent = scanned ? t('emptyScanned') : t('emptyInitial');
     stepsEl.hidden = scanned;
   }
 }
@@ -88,7 +87,7 @@ function render(streams: CapturedStream[]): void {
     host.title = s.manifestUrl; // textContent/title only — never innerHTML (XSS-safe)
     const sub = document.createElement('span');
     sub.className = 'sub';
-    sub.textContent = (i === 0 ? 'Best · ' : '') + (s.kind === 'master' ? 'master playlist' : pathOf(s.manifestUrl));
+    sub.textContent = (i === 0 ? t('best') + ' · ' : '') + (s.kind === 'master' ? t('masterPlaylist') : pathOf(s.manifestUrl));
     sub.title = s.manifestUrl;
     info.append(host, sub);
 
@@ -97,17 +96,17 @@ function render(streams: CapturedStream[]): void {
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.className = 'ghost';
-    copy.textContent = 'Copy';
-    copy.title = 'Copy stream URL';
+    copy.textContent = t('copy');
+    copy.title = t('copyUrl');
     copy.addEventListener('click', () => {
       void navigator.clipboard.writeText(s.manifestUrl).then(() => {
         copy.textContent = '✓';
-        setTimeout(() => (copy.textContent = 'Copy'), 1200);
+        setTimeout(() => (copy.textContent = t('copy')), 1200);
       });
     });
     const watch = document.createElement('button');
     watch.type = 'button';
-    watch.textContent = 'Watch';
+    watch.textContent = t('watch');
     watch.addEventListener('click', () => {
       // Play this mirror first, the rest as failover fallbacks. Request host access for ALL their
       // CDNs in one gesture (no-op if already granted) so failover + header injection can act on each.
@@ -149,10 +148,10 @@ browser.storage.onChanged.addListener((changes, area) => {
 
 scanBtn.addEventListener('click', () => {
   scanBtn.disabled = true;
-  scanBtn.textContent = 'Scanning…';
+  scanBtn.textContent = t('scanning');
   void refresh(true).finally(() => {
     scanBtn.disabled = false;
-    scanBtn.textContent = 'Find streams on this page';
+    scanBtn.textContent = t('scan');
   });
 });
 
@@ -166,7 +165,24 @@ passiveEl.addEventListener('change', async () => {
   }
 });
 
+function applyI18n(): void {
+  scanBtn.textContent = t('scan');
+  (document.getElementById('trust') as HTMLElement).textContent = t('trust');
+  stepsEl.querySelectorAll('li').forEach((li, i) => {
+    const label = [t('step1'), t('step2'), t('step3')][i];
+    if (label) li.textContent = label;
+  });
+  const span = document.querySelector('#passiveRow span');
+  if (span) {
+    span.textContent = t('autoDetect') + ' ';
+    const em = document.createElement('em');
+    em.textContent = t('autoDetectHint');
+    span.append(em);
+  }
+}
+
 void (async () => {
+  applyI18n();
   passiveEl.checked = await browser.permissions.contains(ALL_SITES);
   await refresh(false);
 })();

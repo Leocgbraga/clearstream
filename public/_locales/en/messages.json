@@ -1,0 +1,32 @@
+{
+  "extName": { "message": "ClearStream — HLS Stream Detector & Player" },
+  "extDescription": {
+    "message": "Detects HLS (.m3u8) streams on the page and plays them in a clean, ad-free player. No YouTube, no DRM. You are responsible for ensuring you may access any stream detected."
+  },
+  "scan": { "message": "Find streams on this page" },
+  "scanning": { "message": "Scanning…" },
+  "autoDetect": { "message": "Auto-detect on all sites" },
+  "autoDetectHint": { "message": "(grants site access)" },
+  "trust": { "message": "🔒 Runs on your device. No data leaves your browser." },
+  "emptyInitial": { "message": "No stream detected on this tab yet." },
+  "emptyScanned": {
+    "message": "No HLS stream found. Some sites only load the stream after you press play — try that, then scan again."
+  },
+  "restricted": { "message": "ClearStream can’t scan this page." },
+  "step1": { "message": "Press play on the video." },
+  "step2": { "message": "Click Find streams below." },
+  "step3": { "message": "Watch it clean." },
+  "watch": { "message": "Watch" },
+  "copy": { "message": "Copy" },
+  "copied": { "message": "Copied ✓" },
+  "best": { "message": "Best" },
+  "masterPlaylist": { "message": "master playlist" },
+  "connecting": { "message": "Connecting…" },
+  "switching": { "message": "Switching source…" },
+  "allFailed": { "message": "All sources failed. The stream may have ended or expired." },
+  "tryAgain": { "message": "Try again" },
+  "noStream": { "message": "Open this from the ClearStream popup with a detected stream." },
+  "tapForSound": { "message": "🔊 Tap for sound" },
+  "copyUrl": { "message": "Copy stream URL" },
+  "shortcuts": { "message": "Space play · F full screen · M mute · ← → seek · P picture-in-picture" }
+}
