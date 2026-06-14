@@ -57,6 +57,10 @@ is absent on Firefox); DNR matches all frames with zero host permission and zero
 The granted host then also satisfies the CORS bypass + header injection for playback.
 **Rejected:** `<all_urls>` at install (scary warning, #1 abandonment cause + review flag).
 See [09-ux-permissions](research/09-ux-permissions.md).
+**Update (build):** detection ultimately runs via `activeTab`+`scripting` (click-to-detect) +
+optional passive `webRequest.onSendHeaders` on granted hosts — **not** DNR. `declarativeNetRequest`
+can't silently badge in production (`onRuleMatchedDebug` is dev-only), so it is header-injection only
+(see D7/D17). The empty `host_permissions` install posture is unchanged.
 
 ### D7 — Header injection: Chrome DNR (session, tabId-scoped) / Firefox blocking webRequest
 **Decision:** One `HeaderInjector` interface, two build-time backends. Chrome uses DNR session
@@ -102,6 +106,9 @@ donors. Switching costs more than it saves.
 **Rejected:** migrating to Plasmo/extension.js; porting the Angular (`nas-extension`) or jQuery
 (`ghouet/chrome-hls`) player pages (media-chrome replaces them); `webext-bridge` (prefer
 `@webext-core/messaging`); a React monorepo boilerplate. See [research/11-scaffold-donors.md](research/11-scaffold-donors.md).
+**Update (D20):** i18n ultimately shipped via the platform `_locales` API, **not** `@wxt-dev/i18n`
+(zero new dependency; it localizes the store-facing name/description). `wxt/storage` was likewise not
+adopted — the small `storage.ts`/`prefs.ts` wrappers over `browser.storage` suffice.
 
 ### D11 — Documented hard limits
 DRM (Widevine/FairPlay/PlayReady) impossible (sandboxed CDM). CDNs validating `Origin`/

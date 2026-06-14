@@ -12,7 +12,7 @@
 // `createPlayer` is injected (not imported) so the state machine carries no runtime hls.js/DOM
 // dependency and is unit-testable in node. See docs/research/07-player-engine.md (§5).
 import type { CapturedStream } from '@/core/types';
-import type { PlayerHandle, PlayerOptions } from './hls-controller';
+import type { PlayerHandle, PlayerOptions, PlayerError } from './hls-controller';
 
 // hls.js ErrorTypes/ErrorDetails are stable public string enums; we mirror only the few we act on so
 // this module needs no runtime `import Hls`. (Verified against hls.js 1.6.16 dist types.)
@@ -49,7 +49,7 @@ export const DEFAULT_TUNABLES: FailoverTunables = {
 export type ErrorAction = 'ignore' | 'degrade' | 'recover-network' | 'recover-media' | 'fatal';
 
 /** Pure decision: what should a given hls.js error event do? (No side effects → unit-testable.) */
-export function classifyError(data: { fatal?: boolean; type?: string; details?: string }): ErrorAction {
+export function classifyError(data: PlayerError): ErrorAction {
   if (!data.fatal) {
     const degrading =
       data.type === NETWORK_ERROR ||
@@ -134,7 +134,7 @@ export function createFailoverController(
     if (wasFirst) hooks.onHealthy?.(index); // first good fragment for this source → it works
   };
 
-  function onError(data: { fatal?: boolean; type?: string; details?: string }, my: number): void {
+  function onError(data: PlayerError, my: number): void {
     if (my !== token || destroyed) return;
     const action = classifyError(data);
     if (action === 'ignore') return;

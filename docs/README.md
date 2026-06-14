@@ -13,7 +13,7 @@ plays them in a clean, ad-free hls.js player.
 |---|---|
 | [`architecture.md`](architecture.md) | The synthesized architecture & production plan — **start here**. |
 | [`decisions.md`](decisions.md) | ADR-style log of every locked decision + the rejected alternatives. |
-| [`research/`](research/) | The full, verbatim research reports (10 deep passes) with source URLs. |
+| [`research/`](research/) | The full, verbatim research reports (11 deep passes) with source URLs. |
 
 ## The research passes
 
@@ -35,8 +35,9 @@ plays them in a clean, ad-free hls.js player.
 
 A browser extension is the right form factor because it runs in the user's own browser: no
 Python/mpv install, already past Cloudflare, carries CDN cookies, and **bypasses CORS** (a plain
-web app can't — only ~20–30% of these streams are CORS-open). It detects the `.m3u8` via
-`declarativeNetRequest` (silent, zero install warning), plays it in a bundled hls.js player page
+web app can't — only ~20–30% of these streams are CORS-open). It detects the `.m3u8` by scanning the
+active tab on demand (plus optional passive `webRequest` observation once you grant site access) —
+silent, zero install warning — plays it in a bundled hls.js player page
 (CORS bypassed via host permission requested at "Watch"), injects `Referer`/`Cookie` via DNR
 (Chrome) / blocking webRequest (Firefox), live-ifies stale-`ENDLIST` playlists via a custom
 hls.js `pLoader`, and auto-fails-over across mirror streams. Built with WXT (Chrome/Edge/Firefox

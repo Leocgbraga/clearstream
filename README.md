@@ -44,7 +44,7 @@ WXT · TypeScript · hls.js · media-chrome · Manifest V3 (Chrome, Edge, Firefo
 [`docs/architecture.md`](docs/architecture.md).
 
 ## Docs
-- [`docs/`](docs/) — the full knowledge base (architecture, decisions, 10 research reports).
+- [`docs/`](docs/) — the full knowledge base (architecture, decisions, 11 research reports).
 - [`docs/architecture.md`](docs/architecture.md) — start here.
 - [`docs/decisions.md`](docs/decisions.md) — why every choice was made.
 

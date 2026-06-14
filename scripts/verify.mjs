@@ -73,7 +73,7 @@ try {
   await page.goto('https://hls-js.netlify.app/demo/?src=' + encodeURIComponent(MUX), { waitUntil: 'domcontentloaded' }).catch(() => {});
   await page.waitForTimeout(5000);
   const found = await page.evaluate(() => {
-    const re = /\.(m3u8|mpd)(\?|#|$)/i;
+    const re = /\.m3u8(\?|#|$)/i;
     const out = new Set();
     for (const e of performance.getEntriesByType('resource')) if (re.test(e.name)) out.add(e.name);
     document.querySelectorAll('video,source').forEach((el) => {

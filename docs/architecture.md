@@ -1,6 +1,6 @@
 # ClearStream — Architecture & Production Plan
 
-> The synthesized architecture, distilled from the 10 research passes in [`research/`](research/).
+> The synthesized architecture, distilled from the 11 research passes in [`research/`](research/).
 > This is the actionable blueprint; the research files hold the evidence and source URLs.
 
 ## 1. Context
@@ -22,7 +22,7 @@ bundled pirate-link directory — that framing gets pulled from stores).
 
 ## 2. Scope
 
-**v1 is:** reactive HLS/DASH detector on the active tab · clean bundled hls.js player · header
+**v1 is:** reactive HLS detector on the active tab · clean bundled hls.js player · header
 injection (Referer/Cookie/UA) · multi-stream auto-failover · cross-browser (Chrome/Edge/Firefox)
 · minimal permissions · zero telemetry.
 
@@ -82,28 +82,31 @@ permission bypasses CORS, the keystone that lets hls.js fetch manifest+segments 
 
 ### 5.1 Permission model (minimal install footprint)
 Install with **empty `host_permissions`** → no scary warning.
-- **Detection = `declarativeNetRequest`** rule matching `*.m3u8/*.mpd` → per-tab badge. Matches
-  in-browser without reading the request → no host permission, no warning, sees all frames
-  (where `activeTab`+webRequest is blind / FF-absent).
+- **Detection = active-tab page scan (default):** the popup's "Find streams" runs `activeTab` +
+  `scripting` to read the Performance API + `<video>/<source>` + inline `.m3u8` across all frames —
+  gesture-scoped, no host permission, no warning. (DNR is **not** used to detect: `onRuleMatchedDebug`
+  is dev-only, so DNR can't silently badge in production — it is header-injection only. See D6 note.)
+- **Detection = optional passive observation:** the "auto-detect on all sites" toggle requests
+  `*://*/*` and lights a top-level `webRequest.onSendHeaders` observer that badges + captures the real
+  `Referer`/`Cookie`/`UA` for any `.m3u8` the granted hosts load (incl. cross-iframe CDNs `activeTab`
+  can't see). Inert until granted; revocable.
 - **Playback = optional host permission per-CDN**, requested inside the "Watch" click via
-  `permissions.request({origins:[cdnOrigin]})`; persisted, revocable.
-- **Stubborn pages:** "Scan this page" uses `activeTab`+`scripting` to read `<video>/<source>`/
-  inline `.m3u8` — gesture-scoped, no warning.
-- Perms: `["declarativeNetRequest","storage","activeTab","scripting"]` +
-  `optional_host_permissions:["*://*/*"]`, `host_permissions:[]`.
-- **Phase-1 spike:** confirm low-permission detection on Firefox (FF DNR domain conds are buggy;
-  plain regex match may suffice, else webRequest observation with optional host perms).
+  `permissions.request({origins:[cdnOrigin]})`; persisted, revocable. The grant also satisfies the
+  CORS bypass + header injection for playback.
+- Perms: `["webRequest","declarativeNetRequest","storage","activeTab","scripting"]` +
+  `optional_host_permissions:["*://*/*"]`, `host_permissions:[]` (`declarativeNetRequest` = header
+  injection on Chrome; `webRequest` = passive capture / Firefox blocking injection).
 
 ### 5.2 Capture engine
-Layered (one layer caps ~70% on hostile sites):
-- **L1 (core):** `webRequest` observation — `onSendHeaders` on `*.m3u8` + `onHeadersReceived`
-  content-type net (`mpegurl`) for extensionless manifests; capture headers with
-  `['requestHeaders','extraHeaders']`. **`Authorization` never exposed** → those streams lost.
+Layered (one layer caps ~70% on hostile sites). **Shipped: L1 + L2 (L2 is Chromium-only); L3 is deferred.**
+- **L1 (core):** `webRequest.onSendHeaders` observation on `*.m3u8`, capturing headers with
+  `['requestHeaders','extraHeaders']` (an `onHeadersReceived` content-type net for extensionless
+  manifests is planned). **`Authorization` never exposed** → those streams lost.
 - **L2 (differentiator):** dual content-script — MAIN-world hook (`world:"MAIN"`,
   `document_start`, `all_frames`, `match_origin_as_fallback`) patching
   `fetch`/`XHR`/`JSON.parse`/`TextDecoder` for blob/obfuscated/JSON-embedded manifests → relay
   via `postMessage` to ISOLATED script → SW.
-- **L3 (later):** `MediaSource.appendBuffer` capture (download-only, defer).
+- **L3 (deferred — not implemented):** `MediaSource.appendBuffer` capture (download-only).
 - Dedupe by `{host+path}` (+content-hash for blobs). Classify by body sniff
   (`#EXT-X-STREAM-INF`→master, `#EXTINF`→media). Rank master > media > ad-stub. Write-through to
   `storage.session` on every capture; register listeners synchronously at top level.

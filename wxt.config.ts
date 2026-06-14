@@ -16,10 +16,10 @@ export default defineConfig({
     const isFirefox = browser === 'firefox';
 
     // Minimal install footprint: empty host_permissions (no scary warning).
-    // Detection runs via declarativeNetRequest (no host access needed); host access for a
-    // specific CDN is requested at runtime when the user clicks "Watch".
+    // Detection runs via activeTab + scripting (click-to-detect) plus optional passive webRequest
+    // once host access is granted; host access for a specific CDN is requested at the "Watch" click.
     const base = {
-      // Localized via _locales (src/public/_locales/<lang>/messages.json); default_locale below.
+      // Localized via _locales (public/_locales/<lang>/messages.json at the project root); default_locale below.
       name: '__MSG_extName__',
       description: '__MSG_extDescription__',
       default_locale: 'en',

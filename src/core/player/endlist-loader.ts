@@ -12,7 +12,8 @@ export { makeLive } from './live-playlist';
 
 /** Returns a pLoader class (extends hls.js's default loader) that live-ifies playlist responses.
  *  Typed loosely: hls.js loader generics are intricate and the config `pLoader` field is permissive.
- *  TODO(Phase 2.1): media-sequence liveness guard so genuine VOD isn't forced into a live UI. */
+ *  (The media-sequence liveness guard that keeps genuine VOD out of the live UI lives in makeLive,
+ *  in live-playlist.ts.) */
 export function createLivePLoader(forceLive: boolean): unknown {
   const Base = Hls.DefaultConfig.loader as unknown as new (config: unknown) => {
     load(context: { type?: string }, config: unknown, callbacks: { onSuccess: (...a: unknown[]) => void }): void;
