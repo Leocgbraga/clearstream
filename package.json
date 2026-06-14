@@ -15,6 +15,9 @@
     "zip:firefox": "wxt zip -b firefox",
     "icons": "node scripts/gen-icons.mjs",
     "compile": "tsc --noEmit",
+    "lint:ext": "web-ext lint --source-dir .output/firefox-mv3 --no-config-discovery",
+    "verify": "wxt build && node scripts/verify.mjs",
+    "verify:firefox": "wxt build -b firefox && node scripts/verify-firefox.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -25,7 +28,9 @@
   "devDependencies": {
     "@wxt-dev/auto-icons": "^1.1.1",
     "playwright": "^1.60.0",
+    "selenium-webdriver": "^4.44.0",
     "typescript": "^5.6.0",
+    "web-ext": "^10.4.0",
     "wxt": "^0.20.0"
   }
 }

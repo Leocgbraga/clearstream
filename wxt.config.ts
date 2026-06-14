@@ -38,9 +38,15 @@ export default defineConfig({
         browser_specific_settings: {
           gecko: {
             id: 'clearstream@daedastream.dev',
-            strict_min_version: '128.0',
+            // 140 is the floor that actually honors `data_collection_permissions` (desktop);
+            // declaring a lower min would mean the key is silently ignored there (web-ext warns).
+            strict_min_version: '140.0',
             // No telemetry — required by AMO for new extensions (Nov 2025+).
             data_collection_permissions: { required: ['none'] },
+          },
+          // Firefox for Android honors the data_collection key only from 142.
+          gecko_android: {
+            strict_min_version: '142.0',
           },
         },
       };
