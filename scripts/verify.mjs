@@ -122,7 +122,9 @@ try {
   await popup2.goto(`chrome-extension://${extId}/popup.html`);
   const playerOpened = ctx.waitForEvent('page', { timeout: 20000 });
   await popup2.evaluate((mux) => {
-    const mk = (key, url) => ({ key, manifestUrl: url, tabId: -1, frameId: 0, pageUrl: '', replayHeaders: {}, createdAt: 0 });
+    // kind:'master' makes refineRanking early-return so the [dead, mux] order is preserved and the
+    // dead mirror is actually played first (otherwise the body-sniff would reorder mux to the front).
+    const mk = (key, url) => ({ key, manifestUrl: url, kind: 'master', tabId: -1, frameId: 0, pageUrl: '', replayHeaders: {}, createdAt: 0 });
     return chrome.runtime.sendMessage({
       type: 'OPEN_PLAYER',
       streams: [mk('dead', 'https://test-streams.mux.dev/__nope__/dead.m3u8'), mk('mux', mux)],

@@ -44,6 +44,9 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm build
       - run: xvfb-run -a node scripts/verify.mjs
+      # Hostile-pattern fixtures (local server, no external network): detection matrix across
+      # concealment patterns + VOD/live-ify/failover playback + Referer-gating.
+      - run: xvfb-run -a node scripts/verify-fixtures.mjs
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
