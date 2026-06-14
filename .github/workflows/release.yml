@@ -1,0 +1,93 @@
+name: Release
+
+# Trigger: push a version tag (e.g. `v0.1.0`). See RELEASING.md for the flow.
+# Always produces: built+zipped chrome/firefox/edge artifacts, a provenance attestation, and a
+# GitHub Release. Store publishing (Chrome/Edge/AMO) runs ONLY when the matching secrets are set,
+# so the workflow is safe to run before any store account exists — you just get the GitHub Release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # provenance attestation
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release # gate store-publish behind a protected environment (add manual approval here)
+    env:
+      # Mapped at job level so step-level `if:` can detect whether each store is configured.
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+      EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+      EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+      AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+      AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Never ship a tag that doesn't pass the gates.
+      - run: pnpm check
+
+      - id: vars
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # Build + zip all three targets (WXT names them clearstream-<version>-<target>.zip).
+      - run: pnpm zip
+      - run: pnpm zip:firefox
+      - run: pnpm exec wxt zip -b edge
+
+      - name: Provenance attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: '.output/*.zip'
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .output/*.zip
+          generate_release_notes: true
+
+      # ---- Store publishing (each step is a no-op unless its secrets are configured) ----
+      - name: Publish to Chrome Web Store
+        if: ${{ env.CHROME_EXTENSION_ID != '' }}
+        uses: mnao305/chrome-extension-upload@v5
+        with:
+          file-path: .output/clearstream-${{ steps.vars.outputs.version }}-chrome.zip
+          extension-id: ${{ env.CHROME_EXTENSION_ID }}
+          client-id: ${{ env.CHROME_CLIENT_ID }}
+          client-secret: ${{ env.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ env.CHROME_REFRESH_TOKEN }}
+
+      - name: Publish to Edge Add-ons
+        if: ${{ env.EDGE_PRODUCT_ID != '' }}
+        uses: wdzeng/edge-addon@v2
+        with:
+          product-id: ${{ env.EDGE_PRODUCT_ID }}
+          zip-path: .output/clearstream-${{ steps.vars.outputs.version }}-edge.zip
+          client-id: ${{ env.EDGE_CLIENT_ID }}
+          api-key: ${{ env.EDGE_API_KEY }}
+
+      - name: Publish to Firefox AMO (sign + submit, listed)
+        if: ${{ env.AMO_API_KEY != '' }}
+        uses: wdzeng/firefox-addon@v1
+        with:
+          addon-guid: clearstream@daedastream.dev
+          xpi-path: .output/clearstream-${{ steps.vars.outputs.version }}-firefox.zip
+          # AMO requires the source for a bundled/built add-on so reviewers can reproduce it.
+          source-file-path: .output/clearstream-${{ steps.vars.outputs.version }}-sources.zip
+          api-key: ${{ env.AMO_API_KEY }}
+          api-secret: ${{ env.AMO_API_SECRET }}

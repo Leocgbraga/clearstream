@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Static gate suite — deterministic, no network/browser. Mirrors `pnpm check`:
+  # tsc, eslint, vitest, build (chrome+firefox), bundle budget, no-remote-code audit, web-ext lint.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  # Live end-to-end smoke: load the built extension in real Chromium and assert actual playback
+  # (readyState>=3 && currentTime>0), detection, the DNR header rule, and failover. Headed Chromium
+  # under xvfb (extensions can't load in headless-shell). Network-dependent (fetches the Mux test
+  # stream); kept separate from `check` so a transient network blip doesn't mask a real gate failure.
+  e2e-chromium:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: xvfb-run -a node scripts/verify.mjs

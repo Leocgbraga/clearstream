@@ -10,13 +10,15 @@ it never phones home.**
   faster next time) are stored locally on your device only. They are never synced or uploaded.
 
 ## Permissions, and why
-- **declarativeNetRequest** — detect stream URLs on the page (counts matches in-browser; the
-  extension's code never reads your browsing).
-- **activeTab / scripting** — only when you click "Scan this page," to look for a stream on the
-  page you're currently viewing.
+- **activeTab / scripting** — when you click the toolbar button, ClearStream scans *only the
+  current tab* for a stream. Nothing runs on any page until you click.
+- **declarativeNetRequest** — sets the Referer/Cookie/User-Agent headers a CDN requires, scoped to
+  the player tab, so your chosen stream plays. (On Firefox this is done with blocking webRequest.)
+- **webRequest** — optional; only if you turn on "auto-detect on all sites," to notice streams as a
+  page loads. Inert until you grant host access.
 - **Optional host access** — requested only when you click "Watch," and only for the specific
   video host of the stream you chose. You can revoke it at any time.
-- **storage** — to remember your settings locally.
+- **storage** — to remember your settings and which hosts have worked before, locally.
 
 ## No data collection
 ClearStream does not collect, transmit, sell, or share any personal data. The only network
