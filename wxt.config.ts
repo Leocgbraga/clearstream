@@ -4,6 +4,9 @@ import { defineConfig } from 'wxt';
 // See docs/research/08-cross-browser.md and docs/decisions.md (D6, D7, D9).
 export default defineConfig({
   srcDir: 'src',
+  // The off-store power build (CS_POWER=1) writes to .output/power/ so it never clobbers the store
+  // build in .output/ (and check:store / verify always operate on the clean store artifact).
+  outDir: process.env.CS_POWER === '1' ? '.output/power' : '.output',
   // @wxt-dev/auto-icons resizes one source image (src/assets/icon.png) to all manifest sizes.
   modules: ['@wxt-dev/auto-icons'],
   autoIcons: {
@@ -12,6 +15,9 @@ export default defineConfig({
   },
   // Force MV3 on every browser (incl. Firefox) — modern manifest + FF's retained blocking webRequest.
   manifestVersion: 3,
+  // Build-channel flag: __POWER__ is true only for `pnpm build:power` (CS_POWER=1) — the off-store build
+  // that compiles in the multi-mirror resolver. Store builds leave it false → the resolver tree-shakes out.
+  vite: () => ({ define: { __POWER__: JSON.stringify(process.env.CS_POWER === '1') } }),
   manifest: ({ browser }) => {
     const isFirefox = browser === 'firefox';
 
@@ -25,7 +31,8 @@ export default defineConfig({
       default_locale: 'en',
       // webRequest = optional passive detection/header-capture (inert until host access granted);
       // declarativeNetRequest = header injection (Phase 3). Neither adds a host warning at install.
-      permissions: ['webRequest', 'declarativeNetRequest', 'storage', 'activeTab', 'scripting'] as string[],
+      // `tabs` is added ONLY for the power build (background-tab resolver); store builds never carry it.
+      permissions: ['webRequest', 'declarativeNetRequest', 'storage', 'activeTab', 'scripting', ...(process.env.CS_POWER === '1' ? ['tabs'] : [])] as string[],
       optional_host_permissions: ['*://*/*'],
       host_permissions: [] as string[],
       // No custom content_security_policy: MV3's default (script-src 'self'; object-src 'self')
