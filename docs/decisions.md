@@ -90,6 +90,19 @@ and GitHub (open-source home + signed `.xpi` one-click for Firefox).
 detector/player; Chrome blocks sideloaded `.crx` so GitHub is power-user-only on Chrome.
 See [03-distribution-policy](research/03-distribution-policy.md).
 
+### D12 — Scaffold donors: keep WXT, pull in specific MIT/Apache building blocks
+**Decision:** Don't adopt any boilerplate wholesale. Keep the WXT scaffold and pull in:
+**media-chrome** (MIT) for the player controls + quality selector; **@wxt-dev/auto-icons** (MIT,
+replaces the placeholder `gen-icons.mjs`); **@wxt-dev/i18n** + built-in **wxt/storage**; copy
+detection/parsing from **puemos/hls-downloader** (MIT, Phase 1) and the **hls.js `/demo`** (Apache)
+quality-wiring; copy the **wxt-examples** messaging + Vitest patterns (Phase 1/6).
+**Why:** every full boilerplate is a worse fit — the flagship React one (Jonghakseo, 4.9k★) is
+**archived (Feb 2026)**, others are React/Vue, and Plasmo/extension.js are competing frameworks, not
+donors. Switching costs more than it saves.
+**Rejected:** migrating to Plasmo/extension.js; porting the Angular (`nas-extension`) or jQuery
+(`ghouet/chrome-hls`) player pages (media-chrome replaces them); `webext-bridge` (prefer
+`@webext-core/messaging`); a React monorepo boilerplate. See [research/11-scaffold-donors.md](research/11-scaffold-donors.md).
+
 ### D11 — Documented hard limits
 DRM (Widevine/FairPlay/PlayReady) impossible (sandboxed CDM). CDNs validating `Origin`/
 `Sec-Fetch-*` reject in-browser playback (unforgeable headers) → native-mpv handoff is the

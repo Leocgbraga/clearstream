@@ -29,6 +29,7 @@ plays them in a clean, ad-free hls.js player.
 | 08 | [cross-browser](research/08-cross-browser.md) | Chrome DNR vs Firefox webRequest, Safari, per-browser manifests |
 | 09 | [ux-permissions](research/09-ux-permissions.md) | Minimal-permission model, detect→watch flow, failover UX |
 | 10 | [security-testing-release](research/10-security-testing-release.md) | CSP/no-remote-code, testing, CI/CD tri-store publish |
+| 11 | [scaffold-donors](research/11-scaffold-donors.md) | Boilerplate/skeleton repos + building blocks to pull in (media-chrome, auto-icons, …) |
 
 ## One-paragraph summary
 

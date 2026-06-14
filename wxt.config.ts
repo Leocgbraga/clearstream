@@ -4,6 +4,12 @@ import { defineConfig } from 'wxt';
 // See docs/research/08-cross-browser.md and docs/decisions.md (D6, D7, D9).
 export default defineConfig({
   srcDir: 'src',
+  // @wxt-dev/auto-icons resizes one source image (src/assets/icon.png) to all manifest sizes.
+  modules: ['@wxt-dev/auto-icons'],
+  autoIcons: {
+    // Resolved relative to srcDir ('src') → src/assets/icon.png
+    baseIconPath: 'assets/icon.png',
+  },
   // Force MV3 on every browser (incl. Firefox) — modern manifest + FF's retained blocking webRequest.
   manifestVersion: 3,
   manifest: ({ browser }) => {
@@ -31,6 +37,8 @@ export default defineConfig({
           gecko: {
             id: 'clearstream@daedastream.dev',
             strict_min_version: '128.0',
+            // No telemetry — required by AMO for new extensions (Nov 2025+).
+            data_collection_permissions: { required: ['none'] },
           },
         },
       };

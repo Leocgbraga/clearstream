@@ -42,6 +42,8 @@ mitigation = optional native-mpv handoff (Phase 8). Token-expiring segment URLs 
 | Language | **TypeScript** (`strict`) | Detection/dedupe/failover are pure, unit-testable. |
 | UI | **Vanilla TS** (no framework v1) | Popup = list + button; player = `<video>`. Svelte later if needed. |
 | Player | **hls.js**, pinned `1.6.16`, **full build**, bundled | Sports streams carry alt-audio the light build drops; local bundle → size irrelevant. `enableWorker` needs `worker-src 'self' blob:` in CSP. |
+| Player UI | **media-chrome** (MIT) | Web-component controls + **`<media-rendition-menu>` quality selector** wired to `hls.levels`; bundled (no remote code). Replaces hand-written controls. |
+| Icons | **@wxt-dev/auto-icons** (MIT) | One source `src/assets/icon.png` → all manifest sizes at build. |
 | API | WXT `browser` import, **no webextension-polyfill** | MV3 Chromium returns promises; WXT shim covers the namespace. |
 | Base | **Scratch, not fork** | Port detection from `Stream/stream/extractor.py`; mine `puemos/hls-downloader` (MIT) for patterns; cat-catch GPL → patterns-only. |
 | License | **MIT** | Keep the stack permissive. |
