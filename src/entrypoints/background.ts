@@ -14,7 +14,7 @@ import { browser } from 'wxt/browser';
 import type { CapturedStream, ReplayHeaders } from '@/core/types';
 import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/core/detection';
 import { addStreams, clearTab, getStreams } from '@/core/storage';
-import type { Message, OkResponse, PlaybackResponse, StreamsResponse } from '@/core/messages';
+import type { ErrorResponse, Message, OkResponse, PlaybackResponse, StreamsResponse } from '@/core/messages';
 import { createHeaderInjector } from '@/core/header-injector';
 
 const injector = createHeaderInjector();
@@ -24,7 +24,7 @@ const playbackKey = (tabId: number): string => `playback:${tabId}`;
  *  loaded (Performance API) or in the DOM, each paired with that frame's URL (used as referer). */
 function scanPage(): Array<{ u: string; ref: string }> {
   const found = new Map<string, string>();
-  const re = /\.(m3u8|mpd)(\?|#|$)/i;
+  const re = /\.m3u8(\?|#|$)/i; // HLS only (see MANIFEST_RE) — hls.js can't play DASH
   const ref = location.href;
   try {
     for (const e of performance.getEntriesByType('resource')) if (re.test(e.name)) found.set(e.name, ref);
@@ -112,7 +112,7 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
 async function handle(
   msg: Message,
   sender: { tab?: { id?: number } },
-): Promise<StreamsResponse | PlaybackResponse | OkResponse> {
+): Promise<StreamsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
   switch (msg.type) {
     case 'DETECT':
       return { streams: await detectActiveTab(msg.tabId) };
@@ -149,6 +149,8 @@ async function handle(
       await injector.apply(tabId, stream ? effectiveHeaders(stream) : {});
       return { ok: true };
     }
+    default:
+      return { error: 'Unknown message type' };
   }
 }
 
@@ -168,7 +170,9 @@ export default defineBackground(() => {
   );
 
   browser.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
-    void handle(msg, sender).then(sendResponse);
+    // Always answer the port — including on rejection — so callers (player GET_PLAYBACK /
+    // PREPARE_MIRROR) never hang on an unresolved sendMessage.
+    void handle(msg, sender).then(sendResponse, (err) => sendResponse({ error: String(err) }));
     return true; // async response
   });
 

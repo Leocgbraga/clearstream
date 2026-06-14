@@ -4,7 +4,7 @@
 // See docs/research/07-player-engine.md.
 import 'media-tracks/polyfill';
 import Hls from 'hls.js';
-import type { ErrorData, Level } from 'hls.js';
+import type { Level } from 'hls.js';
 import { createLivePLoader } from './endlist-loader';
 
 export interface PlayerHandle {
@@ -12,11 +12,15 @@ export interface PlayerHandle {
   destroy(): void;
 }
 
+/** Minimal error shape the failover controller acts on. hls.js's ErrorData satisfies it; the native
+ *  (Safari) branch synthesizes one so failover works there too. */
+export type PlayerError = { fatal?: boolean; type?: string; details?: string };
+
 export interface PlayerOptions {
   /** Strip #EXT-X-ENDLIST each poll so rolling-window streams stay live (default true). */
   forceLive?: boolean;
-  /** All hls.js errors (fatal and non-fatal) — the failover controller decides what to do. */
-  onError?: (data: ErrorData) => void;
+  /** All player errors (fatal and non-fatal) — the failover controller decides what to do. */
+  onError?: (data: PlayerError) => void;
   /** A fragment loaded successfully — the "healthy" signal that resets the failover streak. */
   onFragLoaded?: () => void;
 }
@@ -90,12 +94,22 @@ export function createPlayer(
   }
 
   // Native HLS (Safari/iOS) — hls.js unsupported, but the browser plays HLS directly.
-  // No loader hook here (no ENDLIST strip / header injection).
+  // No loader hook here (no ENDLIST strip / header injection), but we DO wire health/error events
+  // so the failover controller works on Safari too (a dead mirror must still advance).
   if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    const onErr = (): void =>
+      opts.onError?.({ fatal: true, type: 'networkError', details: 'nativeMediaError' });
+    const onProgress = (): void => opts.onFragLoaded?.();
+    video.addEventListener('error', onErr);
+    video.addEventListener('progress', onProgress);
+    video.addEventListener('timeupdate', onProgress);
     video.src = src;
     void video.play().catch(() => {});
     return {
       destroy() {
+        video.removeEventListener('error', onErr);
+        video.removeEventListener('progress', onProgress);
+        video.removeEventListener('timeupdate', onProgress);
         video.removeAttribute('src');
         video.load();
       },

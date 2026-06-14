@@ -19,14 +19,14 @@ const mk = (over: Partial<CapturedStream> & { manifestUrl: string }): CapturedSt
 });
 
 describe('isManifestUrl', () => {
-  it('matches .m3u8/.mpd with end, query, or hash', () => {
+  it('matches .m3u8 with end, query, or hash', () => {
     expect(isManifestUrl('https://x/y.m3u8')).toBe(true);
-    expect(isManifestUrl('https://x/y.mpd')).toBe(true);
     expect(isManifestUrl('https://x/y.m3u8?token=abc')).toBe(true);
     expect(isManifestUrl('https://x/y.m3u8#frag')).toBe(true);
     expect(isManifestUrl('https://x/Y.M3U8')).toBe(true); // case-insensitive
   });
-  it('rejects non-manifests', () => {
+  it('rejects DASH (.mpd, unsupported by hls.js) and non-manifests', () => {
+    expect(isManifestUrl('https://x/y.mpd')).toBe(false); // hls.js can't play DASH
     expect(isManifestUrl('https://x/y.mp4')).toBe(false);
     expect(isManifestUrl('https://x/m3u8.html')).toBe(false); // not the extension
     expect(isManifestUrl('https://x/y.ts')).toBe(false);
@@ -40,6 +40,9 @@ describe('canonicalKey', () => {
     expect(a).toBe(b); // differ only by cache-busters → same key
     expect(a).toContain('token=keep');
     expect(a).not.toContain('cb=');
+  });
+  it('is query-param-order independent (so the same stream dedupes via any capture path)', () => {
+    expect(canonicalKey('https://x/a.m3u8?a=1&b=2')).toBe(canonicalKey('https://x/a.m3u8?b=2&a=1'));
   });
   it('falls back to the lowercased input on an invalid URL', () => {
     expect(canonicalKey('NOT A URL')).toBe('not a url');

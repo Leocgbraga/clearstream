@@ -2,7 +2,8 @@
 // See docs/research/06-capture-engine.md (§2, §4) and docs/architecture.md (§5.2).
 import type { CapturedStream, ManifestKind } from './types';
 
-export const MANIFEST_RE = /\.(m3u8|mpd)(\?|#|$)/i;
+// HLS only: hls.js can't play DASH (.mpd), so detecting it would only ever produce a dead "Watch".
+export const MANIFEST_RE = /\.m3u8(\?|#|$)/i;
 
 export function isManifestUrl(url: string): boolean {
   return MANIFEST_RE.test(url);
@@ -12,7 +13,10 @@ export function isManifestUrl(url: string): boolean {
 export function canonicalKey(url: string): string {
   try {
     const u = new URL(url);
-    for (const p of ['_', 't', 'cb', 'cache', 'rnd']) u.searchParams.delete(p);
+    for (const p of ['_', 't', 'cb', 'cache', 'rnd', '_t', 'nocache', 'rand', 'random']) {
+      u.searchParams.delete(p);
+    }
+    u.searchParams.sort(); // order-independent: ?a=1&b=2 and ?b=2&a=1 must dedupe to one key
     return `${u.host}${u.pathname}?${u.searchParams.toString()}`.toLowerCase();
   } catch {
     return url.toLowerCase();

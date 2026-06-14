@@ -6,6 +6,7 @@ import { browser } from 'wxt/browser';
 import type { CapturedStream } from '@/core/types';
 import type { PlaybackResponse } from '@/core/messages';
 import { createFailoverController, type FailoverStatus } from '@/core/player/failover';
+import { createPlayer } from '@/core/player/hls-controller';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 const hint = document.getElementById('hint') as HTMLParagraphElement;
@@ -68,20 +69,33 @@ async function start(): Promise<void> {
     });
   }
 
-  const controller = createFailoverController(video, streams, {
-    prepareMirror: stashed
-      ? (i) => browser.runtime.sendMessage({ type: 'PREPARE_MIRROR', index: i }).then(() => undefined)
-      : async () => {},
-    onStatus: (st: FailoverStatus) => {
-      sourcesSel.value = String(st.index);
-      if (st.failed) {
-        setStatus('');
-        setHint('All sources failed. Try another from the popup.');
-      } else {
-        setStatus(st.message);
-      }
+  // Don't let a silent/slow background wedge playback: time-box the header-injection round-trip.
+  // On timeout/reject the failover controller advances to the next mirror (its own try/catch).
+  const prepareMirror = (i: number): Promise<void> =>
+    Promise.race([
+      browser.runtime.sendMessage({ type: 'PREPARE_MIRROR', index: i }).then(() => undefined),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('header-injection timed out')), 4000),
+      ),
+    ]);
+
+  const controller = createFailoverController(
+    video,
+    streams,
+    {
+      prepareMirror: stashed ? prepareMirror : async () => {},
+      onStatus: (st: FailoverStatus) => {
+        sourcesSel.value = String(st.index);
+        if (st.failed) {
+          setStatus('');
+          setHint('All sources failed. Try another from the popup.');
+        } else {
+          setStatus(st.message);
+        }
+      },
     },
-  });
+    { createPlayer },
+  );
 
   sourcesSel.addEventListener('change', () => controller.select(Number(sourcesSel.value)));
 }

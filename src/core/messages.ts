@@ -17,3 +17,7 @@ export interface PlaybackResponse {
 export interface OkResponse {
   ok: true;
 }
+/** Returned when the background handler rejects, so callers never hang on an unanswered port. */
+export interface ErrorResponse {
+  error: string;
+}
