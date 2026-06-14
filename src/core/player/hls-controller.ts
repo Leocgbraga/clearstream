@@ -23,6 +23,10 @@ export interface PlayerOptions {
 
 // Tuned for flaky live CDNs (see research 07): be patient, don't chase the live edge, cap quality.
 const TUNED = {
+  // Main-thread demux: MV3's default CSP blocks hls.js's blob-URL worker, and adding `worker-src
+  // blob:` to re-enable it trips AMO's custom-CSP review flag — not worth it for ≤1080p streams.
+  // Explicit `false` avoids hls.js attempting the worker and silently falling back (with a console error).
+  enableWorker: false,
   lowLatencyMode: false,
   capLevelToPlayerSize: true,
   capLevelOnFPSDrop: true,

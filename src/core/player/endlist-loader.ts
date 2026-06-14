@@ -4,14 +4,11 @@
 // and worked). A one-shot Blob would stall — the rewrite must run on each poll.
 // See docs/research/07-player-engine.md (§3).
 import Hls from 'hls.js';
+import { makeLive } from './live-playlist';
 
-/** Strip #EXT-X-ENDLIST so a rolling-window playlist keeps refreshing — BUT respect a stream that
- *  declares itself VOD (#EXT-X-PLAYLIST-TYPE:VOD): stripping a true VOD's ENDLIST makes hls.js seek
- *  to a non-existent live edge and never play. Rolling-window live streams don't declare VOD. */
-export function makeLive(text: string): string {
-  if (/#EXT-X-PLAYLIST-TYPE:\s*VOD/i.test(text)) return text;
-  return text.replace(/^#EXT-X-ENDLIST[^\n]*\n?/gim, '');
-}
+// makeLive (the pure ENDLIST/VOD heuristic) lives in ./live-playlist so it's testable without
+// importing hls.js. Re-exported here for back-compat with any existing imports.
+export { makeLive } from './live-playlist';
 
 /** Returns a pLoader class (extends hls.js's default loader) that live-ifies playlist responses.
  *  Typed loosely: hls.js loader generics are intricate and the config `pLoader` field is permissive.

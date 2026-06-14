@@ -28,6 +28,10 @@ export default defineConfig({
       permissions: ['webRequest', 'declarativeNetRequest', 'storage', 'activeTab', 'scripting'] as string[],
       optional_host_permissions: ['*://*/*'],
       host_permissions: [] as string[],
+      // No custom content_security_policy: MV3's default (script-src 'self'; object-src 'self')
+      // already blocks remote code + eval, and a custom CSP — even a stricter one — trips AMO's
+      // "needs additional review" flag (web-ext MANIFEST_CSP). hls.js runs main-thread instead
+      // (enableWorker:false in hls-controller); no-remote-code is enforced by audit-no-remote-code.mjs.
     };
 
     if (isFirefox) {

@@ -6,21 +6,21 @@
 import { browser } from 'wxt/browser';
 import type { ReplayHeaders } from '@/core/types';
 import type { HeaderInjector } from './types';
+import { upsertHeader, type WebRequestHeader } from './merge';
 
-type Header = { name: string; value?: string };
-type Details = { tabId: number; requestHeaders?: Header[] };
+type Details = { tabId: number; requestHeaders?: WebRequestHeader[] };
 
 export class WebRequestInjector implements HeaderInjector {
   readonly #byTab = new Map<number, ReplayHeaders>();
   #listening = false;
 
-  readonly #onBeforeSendHeaders = (details: Details): { requestHeaders?: Header[] } => {
+  readonly #onBeforeSendHeaders = (details: Details): { requestHeaders?: WebRequestHeader[] } => {
     const wanted = this.#byTab.get(details.tabId);
     if (!wanted) return {};
     const headers = details.requestHeaders ?? [];
-    upsert(headers, 'Referer', wanted.referer);
-    upsert(headers, 'Cookie', wanted.cookie);
-    upsert(headers, 'User-Agent', wanted.userAgent);
+    upsertHeader(headers, 'Referer', wanted.referer);
+    upsertHeader(headers, 'Cookie', wanted.cookie);
+    upsertHeader(headers, 'User-Agent', wanted.userAgent);
     return { requestHeaders: headers };
   };
 
@@ -42,11 +42,4 @@ export class WebRequestInjector implements HeaderInjector {
   async clear(tabId: number): Promise<void> {
     this.#byTab.delete(tabId);
   }
-}
-
-function upsert(headers: Header[], name: string, value?: string): void {
-  if (!value) return;
-  const existing = headers.find((h) => h.name.toLowerCase() === name.toLowerCase());
-  if (existing) existing.value = value;
-  else headers.push({ name, value });
 }
