@@ -53,7 +53,7 @@ in a clean, ad-free player.
 ## Permission justifications
 - **activeTab + scripting** — When you click the toolbar button, ClearStream scans *only the
   current tab* for an HLS stream. Nothing runs on any page until you click.
-- **storage** — Saves your preferences (volume, theme) and which video hosts have worked before,
+- **storage** — Saves your preferences (volume) and which video hosts have worked before,
   locally on your device. Never synced or uploaded.
 - **declarativeNetRequest** — Sets the Referer/Cookie/User-Agent headers a CDN requires, scoped to
   the player tab only, so the stream you chose will play.

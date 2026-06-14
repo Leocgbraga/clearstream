@@ -60,16 +60,18 @@ clearstream/
 ├─ src/
 │  ├─ entrypoints/
 │  │  ├─ background.ts              # SW (Chrome) | event page (FF): detection, badge, capture, routing
-│  │  ├─ popup/{index.html,main.ts} # detected-streams list → one-click Watch
-│  │  ├─ player/{index.html,main.ts}# clean hls.js player (unlisted, extension-origin)
-│  │  └─ content.ts                 # (Phase 8) deep fetch/XHR + MediaSource capture
+│  │  ├─ popup/{index.html,main.ts,style.css}    # detected-streams list → one-click Watch
+│  │  ├─ player/{index.html,main.ts,style.css}   # clean hls.js player (unlisted, extension-origin)
+│  │  ├─ deep-main.content.ts       # MAIN-world fetch/XHR deep capture (runtime-registered, Chromium)
+│  │  └─ deep-relay.content.ts      # ISOLATED relay → background (CONTENT_STREAM)
 │  ├─ core/
-│  │  ├─ detection.ts               # detect + dedupe + master-vs-variant rank (port extractor.py)
-│  │  ├─ header-injector/{types,index,dnr.chromium,webrequest.firefox}.ts
-│  │  ├─ player/{hls-controller,endlist-loader,failover}.ts
-│  │  ├─ permissions.ts  storage.ts  types.ts
-│  ├─ assets/  public/{icons,_locales/en}
-├─ tests/{unit (vitest), e2e (playwright)}
+│  │  ├─ detection.ts               # detect + dedupe + master/media rank + body sniff
+│  │  ├─ header-injector/{types,index,chrome,firefox,merge}.ts
+│  │  ├─ player/{hls-controller,endlist-loader,live-playlist,failover,media-tracks.d.ts}
+│  │  ├─ storage.ts  prefs.ts  url-safety.ts  i18n.ts  messages.ts  types.ts
+│  ├─ assets/icon.png               # → @wxt-dev/auto-icons resizes to all sizes
+├─ public/_locales/{en,es,pt}/messages.json      # platform i18n
+├─ tests/unit/*.test.ts (vitest)    # e2e smoke = scripts/verify.mjs (Playwright) + verify-firefox.mjs (Selenium)
 └─ store/{chrome,firefox,edge}      # listing copy + screenshots
 ```
 

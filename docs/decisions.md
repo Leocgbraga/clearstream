@@ -152,3 +152,43 @@ functional. Gating publish on secrets means the pipeline is safe to run before a
 exists (you just get the GitHub Release + power-user "load unpacked" / signed `.xpi`).
 **Rejected:** release-please (extra moving part, untestable without a remote); unconditional store
 steps (would fail the job before stores are set up).
+
+---
+
+## Audit-remediation decisions (Phases A–G)
+
+### D17 — Header injection scoped to the granted CDN hosts
+**Decision:** `HeaderInjector.apply(tabId, headers, hosts)` — Chrome adds `condition.requestDomains`,
+Firefox filters the request host in `onBeforeSendHeaders`.
+**Why:** The original rule was tab-scoped only, so the injected `Referer` rode along to **any** host a
+(possibly malicious) playlist referenced — a referer-leak channel that would become a cookie-exfil
+channel the moment Cookie capture landed. Scoping to the hosts the user granted (`uniqueOrigins`)
+keeps multi-host failover working while bounding leakage. Supersedes chrome.ts's old "unscoped on
+purpose" comment. **Also:** `reconcile(liveTabIds)` drops rules for dead tabs on SW restart, and a
+player tab navigating away clears its rule (no stale Cookie/Referer in a reused tab id).
+
+### D18 — Passive capture via onSendHeaders, re-armed on permission grant
+**Decision:** Passive detection uses `webRequest.onSendHeaders` (+ `extraHeaders` on Chrome) and is
+re-registered on `permissions.onAdded`/`onRemoved`.
+**Why:** `onBeforeRequest` (the original) can't read request headers, so passive mode captured none
+(it claimed to). And a webRequest listener registered before a runtime host grant won't retroactively
+match the newly-granted hosts on Chrome — so the feature was dead until the SW respawned. Re-arming
+makes the "auto-detect on all sites" toggle actually work and capture real Referer/Cookie/UA.
+
+### D19 — Deep capture: runtime-registered MAIN + ISOLATED content scripts, gated on the all-sites grant
+**Decision:** A MAIN-world fetch/XHR hook (`deep-main.content.ts`) + an ISOLATED relay
+(`deep-relay.content.ts`), both `registration: 'runtime'` with `matches: []`, registered by the
+background via `scripting.registerContentScripts` **only while `<all_urls>` is granted**.
+**Why:** Catches blob/obfuscated/JSON-embedded `.m3u8` the DOM/Performance scan misses. Static
+`matches` would hoist `<all_urls>` into `host_permissions` → the scary install warning we avoid (D6);
+runtime registration with empty entrypoint matches keeps `host_permissions: []`. MAIN-world content
+scripts are Chromium-only → Firefox no-op. The background validates every `CONTENT_STREAM` URL (the
+sender is a page-world hook), and sensitive messages remain extension-page-gated (B4).
+**Rejected:** declarative content scripts (install warning); `web_accessible_resources` injection
+(would trip the no-WAR safety guard, B5); on-demand `executeScript` (misses document_start fetches).
+
+### D20 — i18n via the platform _locales API (not @wxt-dev/i18n)
+**Decision:** `public/_locales/{en,es,pt}/messages.json` + `browser.i18n.getMessage` (tiny `t()`
+helper); manifest `name`/`description` via `__MSG_*__` + `default_locale`.
+**Why:** Zero new dependency, canonical, and localizes the store-facing name/description (the
+highest-reach win). publicDir is the project-root `public/` (not `<srcDir>/public`).

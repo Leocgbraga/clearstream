@@ -15,7 +15,7 @@ import path from 'node:path';
 const root = path.resolve('.');
 const buildDir = path.join(root, '.output/firefox-mv3');
 const xpi = path.join(root, '.output/clearstream-firefox.xpi');
-const FF_BIN = '/Applications/Firefox.app/Contents/MacOS/firefox';
+const FF_BIN = process.env.FIREFOX_BIN || '/Applications/Firefox.app/Contents/MacOS/firefox';
 const ADDON_ID = 'clearstream@daedastream.dev';
 // Any fixed valid UUID — pinning it makes moz-extension://<uuid>/ deterministic for navigation.
 const UUID = 'a7c3e1d2-4b5f-4c6a-8d9e-0f1a2b3c4d5e';
@@ -32,7 +32,7 @@ execSync(`cd "${buildDir}" && zip -r -X -q "${xpi}" .`);
 
 const results = {};
 const options = new firefox.Options();
-options.setBinary(FF_BIN);
+if (existsSync(FF_BIN)) options.setBinary(FF_BIN); // else (CI Linux) geckodriver finds firefox on PATH
 if (!HEADED) options.addArguments('-headless');
 options.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 

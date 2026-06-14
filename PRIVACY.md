@@ -6,7 +6,7 @@ it never phones home.**
 ## What stays on your device
 - **Detected streams** are held in temporary session storage and are cleared when you close your
   browser.
-- **Preferences** (volume, theme) and **which video hosts have worked before** (so playback is
+- **Preferences** (volume) and **which video hosts have worked before** (so playback is
   faster next time) are stored locally on your device only. They are never synced or uploaded.
 
 ## Permissions, and why
