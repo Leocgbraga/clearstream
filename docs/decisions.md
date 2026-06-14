@@ -199,3 +199,24 @@ sender is a page-world hook), and sensitive messages remain extension-page-gated
 helper); manifest `name`/`description` via `__MSG_*__` + `default_locale`.
 **Why:** Zero new dependency, canonical, and localizes the store-facing name/description (the
 highest-reach win). publicDir is the project-root `public/` (not `<srcDir>/public`).
+
+### D21 — Multi-mirror resolver lives in an off-store "power" build, behind a build-channel gate
+**Decision:** The active multi-mirror resolver (harvest page mirrors → render each in a hidden
+ad-suppressed tab → capture its `.m3u8` → master-probe + rank → failover player) ships **only** in an
+off-store power build (`CS_POWER=1 wxt build` → `.output/power/`), gated by a single `POWER` flag
+(`__POWER__` Vite define). Store builds fold every `if (POWER)` branch to `false` and tree-shake the
+resolver out; `scripts/check-store-clean.mjs` (in `pnpm check`) fails if any resolver code, power-only
+UI string, the `tabs` permission, or `host_permissions` leaks into the store output. Off-store it
+declares `<all_urls>` at install (no prompt; makes the resolver + deep-capture work and headlessly
+testable). Full rationale + usage in [`POWER.md`](../POWER.md).
+**Why:** Live testing showed *reaching* the stream (links→mirror→embed→nested-iframe→JS-assembled
+`.m3u8`, behind malvertising) is the real pain, not playback. Resolving it is the yt-dlp /
+Kodi-ResolveURL / FetchV pattern: legitimate as a neutral, self-installed power-user tool, but the
+stores' "must not enable unauthorized access" hook doesn't distinguish "user clicked" from "extension
+did it," so it can't ride a store listing. Splitting channels keeps the store reach + clean posture
+(D2) **and** ships the powerful version. The **§1201 no-circumvention line is invariant**: the
+resolver only renders + observes; it never decrypts/forges tokens or touches DRM.
+**Rejected:** *Resolver in the store build* (fails review / risks the listing); *runtime feature
+flag in one build* (the resolver bytes + `tabs`/`<all_urls>` would still ship to stores); *separate
+repo/fork* (drift — the resolver reuses the store build's capture + failover player wholesale).
+See [03-distribution-policy](research/03-distribution-policy.md).

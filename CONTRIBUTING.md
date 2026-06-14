@@ -22,6 +22,9 @@ Live smokes (need the browsers installed locally; also run in CI):
 - `pnpm verify:fixtures` — Chromium: the real extension + its built deep-capture hook against local
   fixtures replicating hostile delivery/concealment patterns (a detection matrix · VOD/live/failover
   playback · Referer-gating). Server + committed test media live in `tests/fixtures/`.
+- `pnpm verify:resolver` — Chromium: the **power build** resolver against local mirror fixtures —
+  harvest → hidden-tab resolve → master-probe → rank, popunder suppression, and the popup button.
+  Power-build only; see [`POWER.md`](POWER.md).
 
 ## Debugging on a real site
 `pnpm build:debug` (or `pnpm dev`) produces a development build with diagnostics compiled in
@@ -49,6 +52,10 @@ reproducible regression test.
   gesture or via the all-sites toggle. Don't add content scripts with static `matches` (that
   re-adds the warning) — register them at runtime (see `deep-*.content.ts` + `syncDeepCapture`).
 - New user-facing strings → add to `public/_locales/en/messages.json` and use `t()` (`src/core/i18n`).
+- Multi-mirror **resolver** code is off-store: gate it behind `POWER` (`src/core/power.ts`) so it
+  folds out of store builds. `pnpm check:store` fails if resolver code / power-only UI / the `tabs`
+  permission leaks into the store output. Never cross the §1201 line (render + observe only). See
+  [`POWER.md`](POWER.md) + `docs/decisions.md` (D21).
 
 ## Hard limits (won't fix)
 DRM playback (sandboxed CDM) · CDNs validating Origin/Sec-Fetch (unforgeable in-browser) · DASH

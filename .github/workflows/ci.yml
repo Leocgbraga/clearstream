@@ -47,6 +47,10 @@ jobs:
       # Hostile-pattern fixtures (local server, no external network): detection matrix across
       # concealment patterns + VOD/live-ify/failover playback + Referer-gating.
       - run: xvfb-run -a node scripts/verify-fixtures.mjs
+      # Power build (off-store) resolver against local mirror fixtures — harvest → hidden-tab resolve
+      # → master-probe → rank, popunder suppression, popup button. No external/pirate sites.
+      - run: pnpm build:power
+      - run: xvfb-run -a node scripts/verify-resolver.mjs
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

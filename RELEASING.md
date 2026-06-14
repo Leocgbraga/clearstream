@@ -24,6 +24,16 @@ must match the `package.json` version (`npm version` guarantees this).
 For Chrome power users, "load unpacked" the unzipped `chrome` build. For Firefox, the AMO-signed
 `.xpi` (once AMO is configured) installs directly; unsigned builds load via `about:debugging`.
 
+## Power build (off-store)
+
+`pnpm build:power` (→ `.output/power/`) produces the **off-store** variant with the multi-mirror
+resolver compiled in. It is **never** submitted to a store — distribute it via the GitHub Release,
+load-unpacked, or a self-signed `.xpi`. The tag-driven release above builds only the **store**
+targets; to ship a power build, build it locally (or add a separate, clearly-labeled CI/release
+step) and attach the zip to the Release manually. The store zips stay resolver-free — `pnpm check`
+(which runs `check:store`) is the gate that proves it. See [`POWER.md`](POWER.md) for the what/why
+and the §1201 no-circumvention invariant.
+
 ## Before your first store submission (one-time gates)
 - **Privacy policy URL (required by all three stores):** host `PRIVACY.md` at a live `https://`
   URL — GitHub Pages, the repo's `PRIVACY.md` blob/raw link, or any static host — and paste that
