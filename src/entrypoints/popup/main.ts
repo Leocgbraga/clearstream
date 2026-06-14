@@ -42,6 +42,7 @@ function uniqueOrigins(streams: CapturedStream[]): string[] {
 }
 
 let current: CapturedStream[] = [];
+let currentTabId: number | undefined;
 
 function render(streams: CapturedStream[]): void {
   current = streams;
@@ -84,14 +85,21 @@ function render(streams: CapturedStream[]): void {
 }
 
 async function refresh(detect: boolean): Promise<void> {
-  const tabId = await activeTabId();
-  if (tabId == null) return;
+  currentTabId = await activeTabId();
+  if (currentTabId == null) return;
   const res = await send<StreamsResponse>({
     type: detect ? 'DETECT' : 'GET_STREAMS',
-    tabId,
+    tabId: currentTabId,
   });
   render(res.streams ?? []);
 }
+
+// Live-update while the popup is open: passive captures write the active tab's session-storage key.
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'session' || currentTabId == null) return;
+  const change = changes[`streams:${currentTabId}`];
+  if (change) render((change.newValue as CapturedStream[] | undefined) ?? []);
+});
 
 scanBtn.addEventListener('click', () => {
   scanBtn.disabled = true;

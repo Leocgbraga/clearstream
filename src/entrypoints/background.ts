@@ -69,7 +69,7 @@ function effectiveHeaders(stream: CapturedStream): ReplayHeaders {
   const h: ReplayHeaders = { ...stream.replayHeaders };
   if (!h.referer && stream.pageUrl) {
     try {
-      h.referer = new URL(stream.pageUrl).origin + '/';
+      h.referer = new URL(stream.pageUrl).href; // full frame URL — many CDNs check the path, not just origin
     } catch {
       /* pageUrl not a URL */
     }
@@ -93,6 +93,55 @@ function hostsOf(streams: CapturedStream[]): string[] {
 /** True only for messages from our own extension pages (popup/player). */
 function fromExtensionPage(sender: { url?: string }): boolean {
   return typeof sender.url === 'string' && sender.url.startsWith(browser.runtime.getURL(''));
+}
+
+// --- Passive detection (optional; lit only when the user grants host access) ---
+// Capture the real request headers (Referer/Cookie/UA) the host page sent for the manifest, so a
+// locked CDN keeps serving when we replay them. onSendHeaders is observe-only (no 'blocking'); on
+// Chrome the header VALUES require the 'extraHeaders' spec.
+type WebRequestHeader = { name: string; value?: string };
+function mapHeaders(reqHeaders: WebRequestHeader[] | undefined): ReplayHeaders {
+  const h: ReplayHeaders = {};
+  for (const { name, value } of reqHeaders ?? []) {
+    const n = name.toLowerCase();
+    if (n === 'referer') h.referer = value;
+    else if (n === 'cookie') h.cookie = value;
+    else if (n === 'user-agent') h.userAgent = value;
+  }
+  return h;
+}
+
+const onSendHeaders = (d: {
+  tabId: number;
+  url: string;
+  frameId: number;
+  requestHeaders?: WebRequestHeader[];
+  initiator?: string;
+  documentUrl?: string;
+}): void => {
+  if (d.tabId < 0 || !isManifestUrl(d.url)) return;
+  const headers = mapHeaders(d.requestHeaders);
+  const pageUrl = headers.referer ?? d.initiator ?? d.documentUrl ?? '';
+  void onDetected(d.tabId, [toStream(d.url, d.tabId, d.frameId, pageUrl, headers)]);
+};
+
+let passiveAttached = false;
+/** (Re)attach the passive observer. A webRequest listener added BEFORE a runtime host grant won't
+ *  retroactively match the newly-granted hosts on Chrome — so remove + re-add on every grant change. */
+function rearmPassive(): void {
+  const ev = browser.webRequest.onSendHeaders;
+  type Add = typeof ev.addListener;
+  if (passiveAttached) {
+    ev.removeListener(onSendHeaders as Parameters<typeof ev.removeListener>[0]);
+    passiveAttached = false;
+  }
+  const extra = (import.meta.env.FIREFOX ? ['requestHeaders'] : ['requestHeaders', 'extraHeaders']) as Parameters<Add>[2];
+  ev.addListener(
+    onSendHeaders as Parameters<Add>[0],
+    { urls: ['<all_urls>'], types: ['xmlhttprequest', 'media', 'other'] } as Parameters<Add>[1],
+    extra,
+  );
+  passiveAttached = true;
 }
 
 async function setBadge(tabId: number, count: number): Promise<void> {
@@ -188,19 +237,12 @@ async function handle(
 }
 
 export default defineBackground(() => {
-  // Passive observers — inert until the user grants host access via the popup toggle.
-  browser.webRequest.onBeforeRequest.addListener(
-    (d) => {
-      if (d.tabId >= 0 && isManifestUrl(d.url)) {
-        const pageUrl = (d as { initiator?: string; documentUrl?: string }).initiator
-          ?? (d as { documentUrl?: string }).documentUrl
-          ?? '';
-        void onDetected(d.tabId, [toStream(d.url, d.tabId, d.frameId, pageUrl)]);
-      }
-      return undefined;
-    },
-    { urls: ['<all_urls>'], types: ['xmlhttprequest', 'media', 'other'] },
-  );
+  // Passive detection — inert until the user grants host access; re-armed on every grant change so a
+  // grant made after startup actually takes effect (Chrome won't retroactively match a pre-registered
+  // listener to newly-granted hosts).
+  rearmPassive();
+  browser.permissions.onAdded.addListener(() => rearmPassive());
+  browser.permissions.onRemoved.addListener(() => rearmPassive());
 
   browser.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
     // Always answer the port — including on rejection — so callers (player GET_PLAYBACK /
