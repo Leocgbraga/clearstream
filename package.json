@@ -34,6 +34,7 @@
     "verify": "wxt build && node scripts/verify.mjs",
     "verify:firefox": "wxt build -b firefox && node scripts/verify-firefox.mjs",
     "verify:fixtures": "wxt build && node scripts/verify-fixtures.mjs",
+    "verify:resolver": "pnpm build:power && node scripts/verify-resolver.mjs",
     "postinstall": "wxt prepare"
   },
   "dependencies": {

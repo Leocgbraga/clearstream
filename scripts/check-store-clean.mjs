@@ -16,6 +16,10 @@ try {
     console.error('✗ store manifest carries the power-only "tabs" permission');
     failed++;
   }
+  if (Array.isArray(mf.host_permissions) && mf.host_permissions.length) {
+    console.error(`✗ store manifest declares host_permissions [${mf.host_permissions.join(', ')}] (must be empty)`);
+    failed++;
+  }
 } catch {
   console.error('No .output/chrome-mv3/manifest.json — run `pnpm build` first.');
   process.exit(1);

@@ -34,7 +34,10 @@ export default defineConfig({
       // `tabs` is added ONLY for the power build (background-tab resolver); store builds never carry it.
       permissions: ['webRequest', 'declarativeNetRequest', 'storage', 'activeTab', 'scripting', ...(process.env.CS_POWER === '1' ? ['tabs'] : [])] as string[],
       optional_host_permissions: ['*://*/*'],
-      host_permissions: [] as string[],
+      // Store builds install with EMPTY host_permissions (no warning). The off-store power build grants
+      // <all_urls> at install instead — the resolver's background tabs need it, and there's no store
+      // warning to avoid off-store; check-store-clean.mjs asserts the store build stays empty.
+      host_permissions: (process.env.CS_POWER === '1' ? ['<all_urls>'] : []) as string[],
       // No custom content_security_policy: MV3's default (script-src 'self'; object-src 'self')
       // already blocks remote code + eval, and a custom CSP — even a stricter one — trips AMO's
       // "needs additional review" flag (web-ext MANIFEST_CSP). hls.js runs main-thread instead

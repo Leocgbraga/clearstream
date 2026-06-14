@@ -19,6 +19,8 @@ import { createHeaderInjector } from '@/core/header-injector';
 import { safeHttpUrl } from '@/core/url-safety';
 import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
 import { dlog } from '@/core/debug';
+import { POWER } from '@/core/power';
+import { resolveInTab, type AwaitCapture } from '@/core/resolver/resolve-tab';
 
 const injector = createHeaderInjector();
 const playbackKey = (tabId: number): string => `playback:${tabId}`;
@@ -200,9 +202,63 @@ async function setBadge(tabId: number, count: number): Promise<void> {
   }
 }
 
+// --- Multi-mirror resolver (POWER build only; CS_POWER_RESOLVER) ---
+// Render each embed/mirror URL in a hidden background tab and let the existing deep-capture observe the
+// .m3u8 it loads. The waiter map below is fed by onDetected. All of this folds away in store builds.
+const resolverWaiters = new Map<
+  number,
+  { got: CapturedStream[]; settle: (s: CapturedStream[]) => void; t?: ReturnType<typeof setTimeout> }
+>();
+
+function finishResolver(tabId: number): void {
+  const e = resolverWaiters.get(tabId);
+  if (!e) return;
+  resolverWaiters.delete(tabId);
+  if (e.t) clearTimeout(e.t);
+  e.settle(e.got);
+}
+
+const awaitCapture: AwaitCapture = (tabId, timeoutMs) =>
+  new Promise<CapturedStream[]>((settle) => {
+    const entry: { got: CapturedStream[]; settle: (s: CapturedStream[]) => void; t?: ReturnType<typeof setTimeout> } = {
+      got: [],
+      settle,
+    };
+    entry.t = setTimeout(() => finishResolver(tabId), timeoutMs); // no capture in time → settle empty
+    resolverWaiters.set(tabId, entry);
+  });
+
+/** Resolve a list of embed/mirror URLs → a deduped, ranked stream list (bounded concurrency). */
+async function resolveMirrors(urls: string[]): Promise<CapturedStream[]> {
+  const MAX = 8;
+  const POOL = 3;
+  const list = urls.slice(0, MAX);
+  if (urls.length > MAX) dlog('resolver: capped', urls.length, '→', MAX, 'mirrors');
+  const all: CapturedStream[] = [];
+  let i = 0;
+  const worker = async (): Promise<void> => {
+    while (i < list.length) {
+      const url = list[i++]!;
+      const streams = await resolveInTab(url, awaitCapture);
+      dlog('resolver:', url, '→', streams.length, 'stream(s)');
+      all.push(...streams);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(POOL, list.length) || 1 }, worker));
+  return dedupeAndRank(all);
+}
+
 async function onDetected(tabId: number, streams: CapturedStream[]): Promise<CapturedStream[]> {
   const merged = await addStreams(tabId, streams);
   dlog('captured', streams.map((s) => `${s.source ?? '?'}:${s.kind ?? '?'} ${s.manifestUrl}`), '→ tab', tabId, 'has', merged.length);
+  if (POWER) {
+    const e = resolverWaiters.get(tabId);
+    if (e) {
+      e.got = merged;
+      if (e.t) clearTimeout(e.t);
+      e.t = setTimeout(() => finishResolver(tabId), 1200); // debounce: collect a few, then settle + close
+    }
+  }
   await setBadge(tabId, merged.length);
   return merged;
 }
@@ -240,7 +296,8 @@ async function handle(
       msg.type === 'GET_PLAYBACK' ||
       msg.type === 'REMEMBER_WORKING' ||
       msg.type === 'DETECT' ||
-      msg.type === 'GET_STREAMS') &&
+      msg.type === 'GET_STREAMS' ||
+      msg.type === 'RESOLVE_PAGE') &&
     !fromExtensionPage(sender)
   ) {
     return { error: 'forbidden' };
@@ -252,6 +309,11 @@ async function handle(
 
     case 'GET_STREAMS':
       return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
+
+    case 'RESOLVE_PAGE':
+      // POWER only: render the page's mirror/embed candidates in hidden tabs, return what resolves.
+      // (P3 fills `urls` from a DOM harvest when omitted.) Folds to [] in store builds → tree-shaken.
+      return POWER ? { streams: await resolveMirrors(msg.urls ?? []) } : { streams: [] };
 
     case 'OPEN_PLAYER': {
       // Reject any non-http(s) manifest URL before it can reach the player / header injection.
