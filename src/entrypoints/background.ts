@@ -224,14 +224,17 @@ async function handle(
   msg: Message,
   sender: { tab?: { id?: number }; url?: string; frameId?: number },
 ): Promise<StreamsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
-  // Playback messages install header rules / read stashed streams — only our own pages may send them
-  // (defense in depth; today there's no externally_connectable/content script, but a content script
-  // arrives in a later phase and must use a different, non-sensitive message type).
+  // Sensitive messages — only our own extension pages (popup/player) may send them (defense in
+  // depth). Playback messages install header rules / read stashed streams; DETECT/GET_STREAMS read a
+  // tab's captures by a caller-supplied tabId, so gate them too. The deep-capture content script that
+  // exists today sends only CONTENT_STREAM, which is non-sensitive and validated below.
   if (
     (msg.type === 'OPEN_PLAYER' ||
       msg.type === 'PREPARE_MIRROR' ||
       msg.type === 'GET_PLAYBACK' ||
-      msg.type === 'REMEMBER_WORKING') &&
+      msg.type === 'REMEMBER_WORKING' ||
+      msg.type === 'DETECT' ||
+      msg.type === 'GET_STREAMS') &&
     !fromExtensionPage(sender)
   ) {
     return { error: 'forbidden' };

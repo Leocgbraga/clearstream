@@ -2,8 +2,9 @@
 // per-tab {headers, hosts} map and rewrite on the fly, only for requests to the granted CDN hosts so
 // an injected Referer can't ride along to an arbitrary host a playlist references. Firefox's DNR
 // domain conditions are buggy, so this is the better path here. The listener is registered lazily on
-// first apply() and filters by tabId. Note: the map is in-memory; if the event page is evicted
-// mid-playback the headers reset (active playback usually keeps it alive). See research/08.
+// first apply(), filters by tabId, and is removed once no tab needs injection. The map is in-memory;
+// if the event page is evicted mid-playback the headers reset (active playback usually keeps it
+// alive). See research/08.
 import { browser } from 'wxt/browser';
 import type { ReplayHeaders } from '@/core/types';
 import type { HeaderInjector } from './types';
@@ -48,6 +49,17 @@ export class WebRequestInjector implements HeaderInjector {
     this.#listening = true;
   }
 
+  /** Drop the global blocking listener once no tab needs header injection (re-added on next apply).
+   *  A blocking onBeforeSendHeaders left attached would tax every request in the browser for nothing,
+   *  and would keep rewriting after the user revokes host access. */
+  #teardownIfIdle(): void {
+    if (this.#byTab.size > 0 || !this.#listening) return;
+    browser.webRequest.onBeforeSendHeaders.removeListener(
+      this.#onBeforeSendHeaders as Parameters<typeof browser.webRequest.onBeforeSendHeaders.removeListener>[0],
+    );
+    this.#listening = false;
+  }
+
   async apply(tabId: number, headers: ReplayHeaders, hosts: string[] = []): Promise<void> {
     this.#byTab.set(tabId, { headers, hosts: new Set(hosts) });
     this.#ensureListening();
@@ -55,10 +67,12 @@ export class WebRequestInjector implements HeaderInjector {
 
   async clear(tabId: number): Promise<void> {
     this.#byTab.delete(tabId);
+    this.#teardownIfIdle();
   }
 
   async reconcile(liveTabIds: number[]): Promise<void> {
     const live = new Set(liveTabIds);
     for (const tabId of [...this.#byTab.keys()]) if (!live.has(tabId)) this.#byTab.delete(tabId);
+    this.#teardownIfIdle();
   }
 }

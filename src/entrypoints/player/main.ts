@@ -72,7 +72,9 @@ async function refineRanking(streams: CapturedStream[]): Promise<CapturedStream[
       try {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 1200);
-        const res = await fetch(s.manifestUrl, { signal: ctrl.signal, credentials: 'include' });
+        // No credentials on the probe: a cookie-gated manifest just falls back to URL ranking, and
+        // credentials:'include' both leaks cookies cross-origin and fails CORS-wildcard manifests.
+        const res = await fetch(s.manifestUrl, { signal: ctrl.signal });
         clearTimeout(t);
         if (res.ok) {
           const kind = classifyManifestBody(await res.text());
@@ -122,7 +124,12 @@ async function start(): Promise<void> {
   }
 
   showOverlay({ spin: true, msg: t('connecting') });
-  streams = await refineRanking(streams);
+  // Refine to the real master when the URL hint is ambiguous — but never let the probes delay the
+  // first frame: race them against a short deadline and start with the URL ranking if they're slow.
+  streams = await Promise.race([
+    refineRanking(streams),
+    new Promise<CapturedStream[]>((resolve) => setTimeout(() => resolve(streams), 700)),
+  ]);
 
   setHint('');
   shortcuts.hidden = false;

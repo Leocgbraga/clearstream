@@ -24,6 +24,30 @@ export default defineContentScript({
       const m = text.match(ABS);
       if (m) for (const u of m) report(u);
     };
+    // Read at most MAX_SNIFF bytes of a response body, then stop. A manifest is tiny, but a live body
+    // (SSE, long-poll, a large JSON API) is not — draining one with .text() would buffer forever.
+    const MAX_SNIFF = 512 * 1024;
+    const readCapped = async (res: Response): Promise<string> => {
+      const body = res.body;
+      if (!body) return (await res.text()).slice(0, MAX_SNIFF);
+      const reader = body.getReader();
+      const dec = new TextDecoder();
+      let out = '';
+      let total = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          out += dec.decode(value, { stream: true });
+          total += value.byteLength;
+          if (total >= MAX_SNIFF) break;
+        }
+      } finally {
+        void reader.cancel().catch(() => {});
+      }
+      return (out + dec.decode()).slice(0, MAX_SNIFF);
+    };
 
     try {
       const orig = window.fetch;
@@ -36,8 +60,13 @@ export default defineContentScript({
         return orig.call(window, input as RequestInfo, init).then((res) => {
           try {
             const ct = res.headers.get('content-type') ?? '';
+            // Never drain a live stream; only sniff manifest-ish bodies, and cap the read.
+            if (/event-stream/i.test(ct)) return res;
             if (RE.test(res.url) || /mpegurl|application\/json|text\//i.test(ct)) {
-              void res.clone().text().then(scanText).catch(() => {});
+              const len = Number(res.headers.get('content-length') ?? '');
+              if (!(Number.isFinite(len) && len > MAX_SNIFF)) {
+                void readCapped(res.clone()).then(scanText).catch(() => {});
+              }
             }
           } catch {
             /* ignore */
@@ -57,8 +86,9 @@ export default defineContentScript({
           this.addEventListener('load', () => {
             try {
               const ct = this.getResponseHeader('content-type') ?? '';
+              if (/event-stream/i.test(ct)) return;
               if (/mpegurl|application\/json|text\//i.test(ct) && typeof this.responseText === 'string') {
-                scanText(this.responseText);
+                scanText(this.responseText.slice(0, MAX_SNIFF));
               }
             } catch {
               /* opaque/binary response */
