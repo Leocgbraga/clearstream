@@ -75,8 +75,6 @@ function effectiveHeaders(stream: CapturedStream): ReplayHeaders {
   return h;
 }
 
-const hasAnyHeader = (h: ReplayHeaders): boolean => Boolean(h.referer || h.cookie || h.userAgent);
-
 async function setBadge(tabId: number, count: number): Promise<void> {
   try {
     await browser.action.setBadgeText({ tabId, text: count ? String(count) : '' });
@@ -123,25 +121,33 @@ async function handle(
       return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
 
     case 'OPEN_PLAYER': {
-      const tab = await browser.tabs.create({
-        url: browser.runtime.getURL('/player.html') + '#src=' + encodeURIComponent(msg.stream.manifestUrl),
-      });
-      if (tab.id != null) await browser.storage.session.set({ [playbackKey(tab.id)]: msg.stream });
+      const first = msg.streams[0];
+      const hash = first ? '#src=' + encodeURIComponent(first.manifestUrl) : '';
+      const tab = await browser.tabs.create({ url: browser.runtime.getURL('/player.html') + hash });
+      if (tab.id != null) await browser.storage.session.set({ [playbackKey(tab.id)]: msg.streams });
       return { ok: true };
     }
 
     case 'GET_PLAYBACK': {
       const tabId = sender.tab?.id;
-      if (tabId == null) return { stream: null };
+      if (tabId == null) return { streams: [] };
       const key = playbackKey(tabId);
       const got = await browser.storage.session.get(key);
-      const stream = (got[key] as CapturedStream | undefined) ?? null;
-      if (stream) {
-        const headers = effectiveHeaders(stream);
-        // Install BEFORE responding so headers are live before the player's first fetch.
-        if (hasAnyHeader(headers)) await injector.apply(tabId, headers);
-      }
-      return { stream };
+      return { streams: (got[key] as CapturedStream[] | undefined) ?? [] };
+    }
+
+    case 'PREPARE_MIRROR': {
+      // Install (or clear) header injection for the chosen mirror BEFORE the player loads it,
+      // so headers are live before hls.js's first request (race-free).
+      const tabId = sender.tab?.id;
+      if (tabId == null) return { ok: true };
+      const key = playbackKey(tabId);
+      const got = await browser.storage.session.get(key);
+      const streams = (got[key] as CapturedStream[] | undefined) ?? [];
+      const stream = streams[msg.index];
+      // apply() with no headers clears any prior mirror's rule, so headers never leak across mirrors.
+      await injector.apply(tabId, stream ? effectiveHeaders(stream) : {});
+      return { ok: true };
     }
   }
 }

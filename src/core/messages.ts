@@ -4,14 +4,15 @@ import type { CapturedStream } from './types';
 export type Message =
   | { type: 'DETECT'; tabId: number } // active-tab scan via activeTab + scripting
   | { type: 'GET_STREAMS'; tabId: number }
-  | { type: 'OPEN_PLAYER'; stream: CapturedStream } // popup → bg: open the clean player for a stream
-  | { type: 'GET_PLAYBACK' }; // player → bg: fetch its stream + install header injection for its tab
+  | { type: 'OPEN_PLAYER'; streams: CapturedStream[] } // popup → bg: open the player with a ranked mirror list
+  | { type: 'GET_PLAYBACK' } // player → bg: fetch its tab's mirror list
+  | { type: 'PREPARE_MIRROR'; index: number }; // player → bg: install header injection for mirror N before it plays
 
 export interface StreamsResponse {
   streams: CapturedStream[];
 }
 export interface PlaybackResponse {
-  stream: CapturedStream | null;
+  streams: CapturedStream[];
 }
 export interface OkResponse {
   ok: true;

@@ -116,9 +116,47 @@ try {
     ...dnr,
   };
 
+  // E) Phase 4: failover — a dead first mirror must auto-advance to a working second one.
+  // Drive the real flow: a popup page sends OPEN_PLAYER with [dead, mux]; bg opens the player tab.
+  const popup2 = await ctx.newPage();
+  await popup2.goto(`chrome-extension://${extId}/popup.html`);
+  const playerOpened = ctx.waitForEvent('page', { timeout: 20000 });
+  await popup2.evaluate((mux) => {
+    const mk = (key, url) => ({ key, manifestUrl: url, tabId: -1, frameId: 0, pageUrl: '', replayHeaders: {}, createdAt: 0 });
+    return chrome.runtime.sendMessage({
+      type: 'OPEN_PLAYER',
+      streams: [mk('dead', 'https://test-streams.mux.dev/__nope__/dead.m3u8'), mk('mux', mux)],
+    });
+  }, MUX);
+  const foPage = await playerOpened;
+  let failover = { ok: false, note: 'player tab not detected' };
+  try {
+    await foPage.waitForFunction(
+      () => {
+        const v = document.querySelector('video');
+        return !!v && v.currentTime > 0;
+      },
+      { timeout: 40000 },
+    );
+    const fo = await foPage.evaluate(() => ({
+      currentTime: document.querySelector('video')?.currentTime ?? 0,
+      source: document.getElementById('sources')?.value ?? null,
+      status: document.getElementById('status')?.textContent ?? null,
+    }));
+    failover = { ok: fo.currentTime > 0 && fo.source === '1', ...fo };
+  } catch (e) {
+    failover = { ok: false, note: String(e?.message ?? e) };
+  }
+  results.failover = failover;
+
   console.log('\n=== RESULTS ===');
   console.log(JSON.stringify(results, null, 2));
-  const allOk = results.player.ok && results.popup.ok && results.detect.ok && results.headerInjection.ok;
+  const allOk =
+    results.player.ok &&
+    results.popup.ok &&
+    results.detect.ok &&
+    results.headerInjection.ok &&
+    results.failover.ok;
   console.log(allOk ? '\nVERIFY: PASS' : '\nVERIFY: FAIL');
   process.exitCode = allOk ? 0 : 1;
 } finally {

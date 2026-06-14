@@ -27,7 +27,24 @@ function hostOf(url: string): string {
   }
 }
 
+/** Unique `*://host/*` patterns across all mirrors, so one permission prompt covers failover. */
+function uniqueOrigins(streams: CapturedStream[]): string[] {
+  const set = new Set<string>();
+  for (const s of streams) {
+    try {
+      const u = new URL(s.manifestUrl);
+      set.add(`${u.protocol}//${u.host}/*`);
+    } catch {
+      /* not a URL */
+    }
+  }
+  return [...set];
+}
+
+let current: CapturedStream[] = [];
+
 function render(streams: CapturedStream[]): void {
+  current = streams;
   listEl.replaceChildren();
   if (!streams.length) {
     listEl.hidden = true;
@@ -48,19 +65,15 @@ function render(streams: CapturedStream[]): void {
     btn.type = 'button';
     btn.textContent = 'Watch';
     btn.addEventListener('click', () => {
-      // Request host access for this stream's CDN inside the user gesture (no-op if already
-      // granted via the passive toggle), so Phase 3 header injection can act on it. Then open.
-      let origins: string[] = [];
-      try {
-        const u = new URL(s.manifestUrl);
-        origins = [`${u.protocol}//${u.host}/*`];
-      } catch {
-        /* not a URL */
-      }
+      // Play this mirror first, the rest as failover fallbacks. Request host access for ALL their
+      // CDNs in one gesture (no-op if the passive toggle already granted) so failover can switch
+      // hosts and Phase 3 header injection can act on each.
+      const ordered = [s, ...current.filter((x) => x.key !== s.key)];
       const open = (): void => {
-        void send({ type: 'OPEN_PLAYER', stream: s });
+        void send({ type: 'OPEN_PLAYER', streams: ordered });
         window.close();
       };
+      const origins = uniqueOrigins(ordered);
       if (origins.length) void browser.permissions.request({ origins }).then(open, open);
       else open();
     });

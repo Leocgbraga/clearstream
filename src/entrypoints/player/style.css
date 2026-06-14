@@ -34,3 +34,21 @@ video {
   margin: 0;
   color: #9aa3a1;
 }
+#status {
+  margin: 0;
+  min-height: 1.2em;
+  color: #f5c518;
+}
+#sourcesRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #9aa3a1;
+}
+#sources {
+  background: #121817;
+  color: #e6e6e6;
+  border: 1px solid #1e2a28;
+  border-radius: 6px;
+  padding: 3px 6px;
+}

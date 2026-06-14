@@ -1,5 +1,6 @@
 // Sets up hls.js with tuned config + the live-ify pLoader, and wires hls.levels into
-// media-chrome's quality menu via the media-tracks polyfill. Phase 4 adds auto-failover.
+// media-chrome's quality menu via the media-tracks polyfill. The failover controller
+// (failover.ts) drives multiple of these across detected mirrors.
 // See docs/research/07-player-engine.md.
 import 'media-tracks/polyfill';
 import Hls from 'hls.js';
@@ -14,7 +15,10 @@ export interface PlayerHandle {
 export interface PlayerOptions {
   /** Strip #EXT-X-ENDLIST each poll so rolling-window streams stay live (default true). */
   forceLive?: boolean;
+  /** All hls.js errors (fatal and non-fatal) — the failover controller decides what to do. */
   onError?: (data: ErrorData) => void;
+  /** A fragment loaded successfully — the "healthy" signal that resets the failover streak. */
+  onFragLoaded?: () => void;
 }
 
 // Tuned for flaky live CDNs (see research 07): be patient, don't chase the live edge, cap quality.
@@ -35,13 +39,11 @@ export function createPlayer(
   src: string,
   opts: PlayerOptions = {},
 ): PlayerHandle {
-  // Prefer hls.js (MSE) wherever it works — Chrome/Edge/Firefox. NOTE: do NOT check
-  // canPlayType('application/vnd.apple.mpegurl') first — Chromium returns "maybe" for it but
-  // can't actually decode HLS natively, so a native-first check breaks playback there.
+  // Prefer hls.js (MSE) wherever it works — Chrome/Edge/Firefox. Do NOT check canPlayType first:
+  // Chromium returns "maybe" for mpegurl but can't decode HLS natively, breaking a native-first check.
   if (Hls.isSupported()) {
     const hls = new Hls({
       ...TUNED,
-      // hls.js typings don't accept our loosely-typed loader class; the runtime contract is correct.
       pLoader: createLivePLoader(opts.forceLive ?? true) as never,
     });
 
@@ -68,6 +70,7 @@ export function createPlayer(
       syncing = false;
     });
 
+    if (opts.onFragLoaded) hls.on(Hls.Events.FRAG_LOADED, () => opts.onFragLoaded?.());
     if (opts.onError) hls.on(Hls.Events.ERROR, (_e, data) => opts.onError?.(data));
 
     hls.loadSource(src);
@@ -98,9 +101,15 @@ export function createPlayer(
   throw new Error('This browser cannot play HLS (no Media Source Extensions or native HLS).');
 }
 
-/** Mirror hls.js video levels into video.videoRenditions so media-chrome can show a quality menu. */
+/** Mirror hls.js video levels into video.videoRenditions so media-chrome can show a quality menu.
+ *  Clears any prior renditions first so switching mirrors doesn't accumulate stale entries. */
 function populateRenditions(video: HTMLVideoElement, levels: Level[]): void {
   if (!video.videoRenditions) return;
+  try {
+    for (const t of [...video.videoTracks]) video.removeVideoTrack(t);
+  } catch {
+    /* nothing to clear */
+  }
   const track = video.addVideoTrack('main');
   track.selected = true;
   for (const level of levels) {
