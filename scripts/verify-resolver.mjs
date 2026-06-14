@@ -8,9 +8,11 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { startFixtureServer } from '../tests/fixtures/server.mjs';
 
-const ext = path.resolve('.output/power/chrome-mv3');
+// Defaults to the prod power build; CS_EXT_DIR lets it verify any built artifact (e.g. the power+debug
+// build at .output/power/chrome-mv3-dev) without editing this file.
+const ext = path.resolve(process.env.CS_EXT_DIR ?? '.output/power/chrome-mv3');
 if (!existsSync(ext)) {
-  console.error('No .output/power/chrome-mv3 — run `pnpm build:power` first.');
+  console.error(`No ${ext} — run \`pnpm build:power\` (or set CS_EXT_DIR) first.`);
   process.exit(1);
 }
 

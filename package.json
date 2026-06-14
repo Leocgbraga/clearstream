@@ -19,6 +19,7 @@
     "build:edge": "wxt build -b edge",
     "build:debug": "wxt build --mode development",
     "build:power": "CS_POWER=1 wxt build",
+    "build:power:debug": "CS_POWER=1 wxt build --mode development",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "icons": "node scripts/gen-icons.mjs",
