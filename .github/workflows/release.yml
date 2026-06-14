@@ -29,11 +29,11 @@ jobs:
       AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
       AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10.28.2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: pnpm
@@ -51,12 +51,12 @@ jobs:
       - run: pnpm exec wxt zip -b edge
 
       - name: Provenance attestation
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1
         with:
           subject-path: '.output/*.zip'
 
       - name: GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: .output/*.zip
           generate_release_notes: true
@@ -64,7 +64,7 @@ jobs:
       # ---- Store publishing (each step is a no-op unless its secrets are configured) ----
       - name: Publish to Chrome Web Store
         if: ${{ env.CHROME_EXTENSION_ID != '' }}
-        uses: mnao305/chrome-extension-upload@v5
+        uses: mnao305/chrome-extension-upload@fdfe79400af990f5145a319e834aee64907ccff4 # v6.0.0
         with:
           file-path: .output/clearstream-${{ steps.vars.outputs.version }}-chrome.zip
           extension-id: ${{ env.CHROME_EXTENSION_ID }}
@@ -74,7 +74,7 @@ jobs:
 
       - name: Publish to Edge Add-ons
         if: ${{ env.EDGE_PRODUCT_ID != '' }}
-        uses: wdzeng/edge-addon@v2
+        uses: wdzeng/edge-addon@9881f57720358040d079eaa06a4596dc9c273eb6 # v2
         with:
           product-id: ${{ env.EDGE_PRODUCT_ID }}
           zip-path: .output/clearstream-${{ steps.vars.outputs.version }}-edge.zip
@@ -83,7 +83,7 @@ jobs:
 
       - name: Publish to Firefox AMO (sign + submit, listed)
         if: ${{ env.AMO_API_KEY != '' }}
-        uses: wdzeng/firefox-addon@v1
+        uses: wdzeng/firefox-addon@3184ee491b500e080885e046051366a4228c6e5d # v1
         with:
           addon-guid: clearstream@daedastream.dev
           xpi-path: .output/clearstream-${{ steps.vars.outputs.version }}-firefox.zip

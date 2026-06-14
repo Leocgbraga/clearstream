@@ -12,10 +12,10 @@ importers:
         specifier: 1.6.16
         version: 1.6.16
       media-chrome:
-        specifier: ^4.19.2
+        specifier: 4.19.2
         version: 4.19.2(react@19.2.7)
       media-tracks:
-        specifier: ^0.3.5
+        specifier: 0.3.5
         version: 0.3.5
     devDependencies:
       '@wxt-dev/auto-icons':

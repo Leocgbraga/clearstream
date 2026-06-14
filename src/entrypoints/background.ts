@@ -6,8 +6,8 @@
 //   • Passive (optional): top-level webRequest observers fire only for hosts the user granted via the
 //     "auto-detect on all sites" toggle → badge + capture request headers (incl. Referer/Cookie).
 //
-// Playback (Phase 3): popup → OPEN_PLAYER stashes the chosen stream keyed by the new player tab id
-// and opens player.html. The player then calls GET_PLAYBACK, which installs a tab-scoped header
+// Playback (Phase 3): popup → OPEN_PLAYER stashes the chosen streams keyed by the new player tab id
+// and opens player.html. The player then calls GET_PLAYBACK, which installs a tab+host-scoped header
 // rule (DNR on Chrome / blocking webRequest on Firefox) BEFORE returning — so headers are in place
 // before hls.js makes its first request (race-free). See docs/research/{06,07,08}.
 import { browser } from 'wxt/browser';
@@ -16,9 +16,11 @@ import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/cor
 import { addStreams, clearTab, getStreams } from '@/core/storage';
 import type { ErrorResponse, Message, OkResponse, PlaybackResponse, StreamsResponse } from '@/core/messages';
 import { createHeaderInjector } from '@/core/header-injector';
+import { safeHttpUrl } from '@/core/url-safety';
 
 const injector = createHeaderInjector();
 const playbackKey = (tabId: number): string => `playback:${tabId}`;
+const PLAYER_URL = browser.runtime.getURL('/player.html');
 
 /** Injected into each frame of the active tab (activeTab grant). Returns the manifest URLs already
  *  loaded (Performance API) or in the DOM, each paired with that frame's URL (used as referer). */
@@ -75,6 +77,24 @@ function effectiveHeaders(stream: CapturedStream): ReplayHeaders {
   return h;
 }
 
+/** Unique CDN hostnames across a mirror list — the set header injection is scoped to. */
+function hostsOf(streams: CapturedStream[]): string[] {
+  const set = new Set<string>();
+  for (const s of streams) {
+    try {
+      set.add(new URL(s.manifestUrl).hostname);
+    } catch {
+      /* skip */
+    }
+  }
+  return [...set];
+}
+
+/** True only for messages from our own extension pages (popup/player). */
+function fromExtensionPage(sender: { url?: string }): boolean {
+  return typeof sender.url === 'string' && sender.url.startsWith(browser.runtime.getURL(''));
+}
+
 async function setBadge(tabId: number, count: number): Promise<void> {
   try {
     await browser.action.setBadgeText({ tabId, text: count ? String(count) : '' });
@@ -111,8 +131,18 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
 
 async function handle(
   msg: Message,
-  sender: { tab?: { id?: number } },
+  sender: { tab?: { id?: number }; url?: string },
 ): Promise<StreamsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
+  // Playback messages install header rules / read stashed streams — only our own pages may send them
+  // (defense in depth; today there's no externally_connectable/content script, but a content script
+  // arrives in a later phase and must use a different, non-sensitive message type).
+  if (
+    (msg.type === 'OPEN_PLAYER' || msg.type === 'PREPARE_MIRROR' || msg.type === 'GET_PLAYBACK') &&
+    !fromExtensionPage(sender)
+  ) {
+    return { error: 'forbidden' };
+  }
+
   switch (msg.type) {
     case 'DETECT':
       return { streams: await detectActiveTab(msg.tabId) };
@@ -121,10 +151,12 @@ async function handle(
       return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
 
     case 'OPEN_PLAYER': {
-      const first = msg.streams[0];
-      const hash = first ? '#src=' + encodeURIComponent(first.manifestUrl) : '';
-      const tab = await browser.tabs.create({ url: browser.runtime.getURL('/player.html') + hash });
-      if (tab.id != null) await browser.storage.session.set({ [playbackKey(tab.id)]: msg.streams });
+      // Reject any non-http(s) manifest URL before it can reach the player / header injection.
+      const streams = msg.streams.filter((s) => safeHttpUrl(s.manifestUrl));
+      if (!streams.length) return { error: 'No playable stream URL' };
+      const hash = '#src=' + encodeURIComponent(streams[0]!.manifestUrl);
+      const tab = await browser.tabs.create({ url: PLAYER_URL + hash });
+      if (tab.id != null) await browser.storage.session.set({ [playbackKey(tab.id)]: streams });
       return { ok: true };
     }
 
@@ -145,8 +177,9 @@ async function handle(
       const got = await browser.storage.session.get(key);
       const streams = (got[key] as CapturedStream[] | undefined) ?? [];
       const stream = streams[msg.index];
-      // apply() with no headers clears any prior mirror's rule, so headers never leak across mirrors.
-      await injector.apply(tabId, stream ? effectiveHeaders(stream) : {});
+      // apply() with no headers clears any prior mirror's rule; hosts scope injection to the granted
+      // CDNs so headers never leak to an unrelated host.
+      await injector.apply(tabId, stream ? effectiveHeaders(stream) : {}, hostsOf(streams));
       return { ok: true };
     }
     default:
@@ -180,6 +213,12 @@ export default defineBackground(() => {
   browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status === 'loading' && changeInfo.url) {
       void clearTab(tabId).then(() => setBadge(tabId, 0));
+      // If a PLAYER tab navigates AWAY (not its initial load of player.html), tear down its header
+      // rule + stashed playback so a reused tab id can't inherit a stale Referer/Cookie.
+      if (!changeInfo.url.startsWith(PLAYER_URL)) {
+        void injector.clear(tabId);
+        void browser.storage.session.remove(playbackKey(tabId));
+      }
     }
   });
   browser.tabs.onRemoved.addListener((tabId) => {
@@ -187,4 +226,10 @@ export default defineBackground(() => {
     void injector.clear(tabId);
     void browser.storage.session.remove(playbackKey(tabId));
   });
+
+  // On (re)start, drop any header rules whose player tab is gone.
+  void browser.tabs
+    .query({})
+    .then((tabs) => injector.reconcile(tabs.map((t) => t.id).filter((id): id is number => id != null)))
+    .catch(() => {});
 });

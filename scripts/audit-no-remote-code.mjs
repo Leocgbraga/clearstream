@@ -49,6 +49,23 @@ for (const root of targets) {
   }
 }
 
+// The player page is unreachable from the web ONLY because no web_accessible_resources exists.
+// Assert that safety can't silently regress into a built manifest.
+for (const root of targets) {
+  const mf = path.join(root, 'manifest.json');
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(mf, 'utf8'));
+  } catch {
+    continue;
+  }
+  const war = manifest.web_accessible_resources;
+  if (Array.isArray(war) && war.length) {
+    violations++;
+    console.error(`✗ web_accessible_resources present in ${path.relative(process.cwd(), mf)} (player must stay non-web-accessible)`);
+  }
+}
+
 if (!scanned) {
   console.error('No build output found — run `pnpm build && pnpm build:firefox` first.');
   process.exit(1);

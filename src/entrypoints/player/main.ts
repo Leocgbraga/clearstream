@@ -7,6 +7,7 @@ import type { CapturedStream } from '@/core/types';
 import type { PlaybackResponse } from '@/core/messages';
 import { createFailoverController, type FailoverStatus } from '@/core/player/failover';
 import { createPlayer } from '@/core/player/hls-controller';
+import { safeHttpUrl } from '@/core/url-safety';
 
 const video = document.getElementById('video') as HTMLVideoElement;
 const hint = document.getElementById('hint') as HTMLParagraphElement;
@@ -31,7 +32,7 @@ function hostOf(url: string): string {
 }
 
 async function start(): Promise<void> {
-  const fallback = new URLSearchParams(location.hash.slice(1)).get('src');
+  const fallback = safeHttpUrl(new URLSearchParams(location.hash.slice(1)).get('src'));
 
   // GET_PLAYBACK returns this tab's ranked mirror list (set by the popup's Watch).
   let streams: CapturedStream[] = [];

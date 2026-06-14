@@ -6,6 +6,7 @@ import 'media-tracks/polyfill';
 import Hls from 'hls.js';
 import type { Level } from 'hls.js';
 import { createLivePLoader } from './endlist-loader';
+import { safeHttpUrl } from '@/core/url-safety';
 
 export interface PlayerHandle {
   hls?: Hls;
@@ -47,6 +48,7 @@ export function createPlayer(
   src: string,
   opts: PlayerOptions = {},
 ): PlayerHandle {
+  if (!safeHttpUrl(src)) throw new Error('Refusing to load a non-http(s) stream URL'); // defense in depth
   // Prefer hls.js (MSE) wherever it works — Chrome/Edge/Firefox. Do NOT check canPlayType first:
   // Chromium returns "maybe" for mpegurl but can't decode HLS natively, breaking a native-first check.
   if (Hls.isSupported()) {

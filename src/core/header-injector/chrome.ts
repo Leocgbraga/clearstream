@@ -23,7 +23,7 @@ function toModifyHeaders(h: ReplayHeaders): ModifyHeader[] {
 }
 
 export class DnrInjector implements HeaderInjector {
-  async apply(tabId: number, headers: ReplayHeaders): Promise<void> {
+  async apply(tabId: number, headers: ReplayHeaders, hosts: string[] = []): Promise<void> {
     const requestHeaders = toModifyHeaders(headers);
     const id = ruleId(tabId);
     if (requestHeaders.length === 0) {
@@ -39,6 +39,9 @@ export class DnrInjector implements HeaderInjector {
           action: { type: 'modifyHeaders', requestHeaders },
           condition: {
             tabIds: [tabId],
+            // Scope to the granted CDN hosts so the injected Referer can't ride along to an arbitrary
+            // host a (malicious) playlist references. Empty = unscoped (direct-link fallback).
+            ...(hosts.length ? { requestDomains: hosts } : {}),
             resourceTypes: ['xmlhttprequest', 'media', 'other'],
           },
         },
@@ -48,5 +51,14 @@ export class DnrInjector implements HeaderInjector {
 
   async clear(tabId: number): Promise<void> {
     await browser.declarativeNetRequest.updateSessionRules({ removeRuleIds: [ruleId(tabId)] });
+  }
+
+  async reconcile(liveTabIds: number[]): Promise<void> {
+    // On SW restart, drop header rules whose player tab is gone, so a reused tab id can't inherit
+    // a stale Referer/Cookie rule. (DNR session rules are durable across SW lifecycles.)
+    const live = new Set(liveTabIds);
+    const rules = await browser.declarativeNetRequest.getSessionRules();
+    const stale = rules.filter((r) => !live.has(r.id - RULE_BASE)).map((r) => r.id);
+    if (stale.length) await browser.declarativeNetRequest.updateSessionRules({ removeRuleIds: stale });
   }
 }

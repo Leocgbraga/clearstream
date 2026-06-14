@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Keep bundled/runtime deps (hls.js, media-chrome, media-tracks) and tooling patched.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  # Bump the SHA-pinned GitHub Actions (CI + release publishers hold store secrets).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
