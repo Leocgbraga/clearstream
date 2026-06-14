@@ -14,6 +14,9 @@ importers:
       media-chrome:
         specifier: ^4.19.2
         version: 4.19.2(react@19.2.7)
+      media-tracks:
+        specifier: ^0.3.5
+        version: 0.3.5
     devDependencies:
       '@wxt-dev/auto-icons':
         specifier: ^1.1.1
@@ -1309,6 +1312,9 @@ packages:
 
   media-chrome@4.19.2:
     resolution: {integrity: sha512-4ai1ITN8wBhwugQcRgqe3tN0z6OSKGOXqHLNrS04MgKFfsLqu6Dm8MPq02pI9Y9ZKoXtFjIl85jOryIW9es3BA==}
+
+  media-tracks@0.3.5:
+    resolution: {integrity: sha512-l54rkKXlLBt3ob3zOLWHcnjvwUmX5bNEZ70igyapOZZC9imzqBmq1oz8p2roiV04KhjblFIi2hetLPF1oYVLRA==}
 
   mimic-function@5.0.1:
     resolution: {integrity: sha512-VP79XUPxV2CigYP3jWwAUFSku2aKqBH7uTAapFWCBqutsbmDo96KY5o8uh6U+/YSIn5OxJnXp73beVkpqMIGhA==}
@@ -2911,6 +2917,8 @@ snapshots:
       ce-la-react: 0.3.2(react@19.2.7)
     transitivePeerDependencies:
       - react
+
+  media-tracks@0.3.5: {}
 
   mimic-function@5.0.1: {}
 

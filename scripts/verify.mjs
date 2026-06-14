@@ -40,9 +40,18 @@ try {
   );
   const info = await player.evaluate(() => {
     const v = document.querySelector('video');
-    return { currentTime: v.currentTime, w: v.videoWidth, h: v.videoHeight, hasControls: !!document.querySelector('media-controller') };
+    return {
+      currentTime: v.currentTime,
+      w: v.videoWidth,
+      h: v.videoHeight,
+      hasControls: !!document.querySelector('media-controller'),
+      // Phase 2: hls.levels mirrored into videoRenditions (media-tracks) → media-chrome quality menu.
+      renditions: v.videoRenditions ? v.videoRenditions.length : 0,
+    };
   });
-  results.player = { ok: info.currentTime > 0 && info.w > 0, ...info };
+  // Mux test stream is VOD (#EXT-X-ENDLIST). Playing it with forceLive=true means the pLoader
+  // stripped ENDLIST and it still plays → proves the live-ify loader works without breaking playback.
+  results.player = { ok: info.currentTime > 0 && info.w > 0 && info.renditions > 0, ...info };
   await player.waitForTimeout(800);
   await player.screenshot({ path: path.join(SHOTS, 'phase1-player.png') });
 

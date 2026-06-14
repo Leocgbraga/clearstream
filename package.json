@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "hls.js": "1.6.16",
-    "media-chrome": "^4.19.2"
+    "media-chrome": "^4.19.2",
+    "media-tracks": "^0.3.5"
   },
   "devDependencies": {
     "@wxt-dev/auto-icons": "^1.1.1",
