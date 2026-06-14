@@ -58,6 +58,11 @@ button {
 button:hover {
   filter: brightness(1.08);
 }
+button:focus-visible,
+#sources:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+}
 #copy {
   background: #142420;
   color: var(--accent);
