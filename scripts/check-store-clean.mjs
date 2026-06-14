@@ -7,7 +7,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve('.output/chrome-mv3');
-const SENTINEL = 'CS_POWER_RESOLVER'; // marker string embedded in every resolver module
+const SENTINEL = 'CS_POWER_RESOLVER'; // comment marker in every resolver core module (dropped with it)
+// User-facing POWER-only strings. Unlike the comment sentinel (stripped by minification), these are
+// string literals that SURVIVE minification — so they catch a popup "Resolve" block that failed to
+// tree-shake even if the resolver core modules were correctly dropped. Keep in sync with popup/main.ts.
+const POWER_UI_MARKERS = ['Resolve streams', 'Resolving mirrors'];
 let failed = 0;
 
 try {
@@ -38,9 +42,17 @@ function walk(dir) {
 let scanned = 0;
 for (const f of walk(root)) {
   scanned++;
-  if (readFileSync(f, 'utf8').includes(SENTINEL)) {
-    console.error(`✗ resolver code leaked into the store build: ${path.relative(process.cwd(), f)}`);
+  const src = readFileSync(f, 'utf8');
+  const rel = path.relative(process.cwd(), f);
+  if (src.includes(SENTINEL)) {
+    console.error(`✗ resolver code leaked into the store build: ${rel}`);
     failed++;
+  }
+  for (const marker of POWER_UI_MARKERS) {
+    if (src.includes(marker)) {
+      console.error(`✗ POWER-only UI string "${marker}" leaked into the store build: ${rel}`);
+      failed++;
+    }
   }
 }
 

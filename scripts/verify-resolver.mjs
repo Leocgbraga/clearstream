@@ -78,19 +78,39 @@ try {
   // baseline. A leaked ad tab (suppression failure) would push hAfter above hBefore.
   results.harvestCleanup = { ok: hAfter <= hBefore, before: hBefore, after: hAfter };
 
+  // Popup UI (power build): the "✨ Resolve streams" button must be present + wired. The full
+  // button→active-tab→render happy path isn't auto-driven here — Playwright can't bind a real
+  // browser-action popup to an underlying active tab — so resolution itself is proven by the direct
+  // RESOLVE_PAGE tests above; here we prove the button renders and its handler runs (surfaces status).
+  const btn = popup.locator('button', { hasText: 'Resolve streams' });
+  const btnPresent = (await btn.count()) === 1;
+  let statusShown = false;
+  if (btnPresent) {
+    await btn.click();
+    statusShown = await popup
+      .locator('p')
+      .filter({ hasText: /resolv|mirror|tab/i })
+      .first()
+      .isVisible()
+      .catch(() => false);
+  }
+  results.popupUi = { ok: btnPresent && statusShown, btnPresent, statusShown };
+
   console.log('\n=== RESOLVER ===');
   console.log(`  ${results.single.ok ? '✓' : '✗'} resolve embed → m3u8        ${JSON.stringify(results.single)}`);
   console.log(`  ${results.tabCleanup.ok ? '✓' : '✗'} resolver tab cleaned up     ${JSON.stringify(results.tabCleanup)}`);
   console.log(`  ${results.harvest.ok ? '✓' : '✗'} harvest links → m3u8        ${JSON.stringify(results.harvest)}`);
   console.log(`  ${results.harvest.masterWon ? '✓' : '✗'} master mirror ranked first  ${JSON.stringify({ top: results.harvest.top })}`);
   console.log(`  ${results.harvestCleanup.ok ? '✓' : '✗'} popunder suppressed/cleaned ${JSON.stringify(results.harvestCleanup)}`);
+  console.log(`  ${results.popupUi.ok ? '✓' : '✗'} power popup resolve button  ${JSON.stringify(results.popupUi)}`);
 
   const allOk =
     results.single.ok &&
     results.tabCleanup.ok &&
     results.harvest.ok &&
     results.harvest.masterWon &&
-    results.harvestCleanup.ok;
+    results.harvestCleanup.ok &&
+    results.popupUi.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);
   process.exitCode = allOk ? 0 : 1;
 } finally {

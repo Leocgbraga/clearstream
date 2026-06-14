@@ -1,9 +1,10 @@
 import './style.css';
 import { browser } from 'wxt/browser';
 import type { CapturedStream } from '@/core/types';
-import type { Message, StreamsResponse } from '@/core/messages';
+import type { Message, ResolveProgress, StreamsResponse } from '@/core/messages';
 import { t } from '@/core/i18n';
 import { DEBUG, dlog } from '@/core/debug';
+import { POWER } from '@/core/power';
 
 const listEl = document.getElementById('list') as HTMLUListElement;
 const emptyEl = document.getElementById('empty') as HTMLDivElement;
@@ -180,6 +181,76 @@ scanBtn.addEventListener('click', () => {
     scanBtn.textContent = t('scan');
   });
 });
+
+// POWER build only (off-store): "Resolve streams" — harvest this page's mirror/embed links, render each
+// in a hidden ad-suppressed tab, and surface the .m3u8s they load (with live N/total progress), then
+// reuse the normal ranked-list render + Watch (failover player). This UI never ships to the stores:
+// POWER is false there, so the whole block is inert + tree-shaken. The power build is GitHub/dev-
+// distributed and English-only, so these strings are intentionally not run through i18n.
+if (POWER) {
+  const RESOLVE_LABEL = '✨ Resolve streams';
+  const resolveBtn = document.createElement('button');
+  resolveBtn.type = 'button';
+  resolveBtn.textContent = RESOLVE_LABEL;
+  resolveBtn.title = 'Follow this page’s mirror links + embeds in hidden tabs and collect their streams';
+  resolveBtn.style.cssText = 'width:100%;margin-top:8px';
+  scanBtn.insertAdjacentElement('afterend', resolveBtn);
+
+  const status = document.createElement('p');
+  status.hidden = true;
+  status.style.cssText = 'margin:8px 0 0;font-size:11px;color:var(--muted);text-align:center';
+  resolveBtn.insertAdjacentElement('afterend', status);
+
+  let resolving = false;
+
+  // Live progress: the background writes resolve:<tabId> to storage.session as mirrors resolve.
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'session' || !resolving || currentTabId == null) return;
+    const p = changes[`resolve:${currentTabId}`]?.newValue as ResolveProgress | undefined;
+    if (!p) return;
+    status.textContent =
+      p.phase === 'harvest'
+        ? 'Scanning page for mirrors…'
+        : p.phase === 'done'
+          ? `Resolved ${p.found} stream${p.found === 1 ? '' : 's'}.`
+          : `Resolving mirrors ${p.done}/${p.total}… (${p.found} found)`;
+  });
+
+  resolveBtn.addEventListener('click', () => {
+    if (currentTabId == null || restricted) {
+      status.hidden = false;
+      status.textContent = restricted ? 'Can’t resolve this kind of page.' : 'No active tab.';
+      return;
+    }
+    const tabId = currentTabId;
+    resolving = true;
+    resolveBtn.disabled = true;
+    resolveBtn.textContent = 'Resolving…';
+    status.hidden = false;
+    status.textContent = 'Scanning page for mirrors…';
+    void send<StreamsResponse>({ type: 'RESOLVE_PAGE', tabId })
+      .then((res) => {
+        const streams = res.streams ?? [];
+        dlog('popup: resolved', streams.length, 'stream(s) on tab', tabId);
+        if (streams.length) {
+          render(streams);
+          status.hidden = true;
+        } else {
+          status.textContent = 'No streams found in this page’s mirrors.';
+        }
+      })
+      .catch((err) => {
+        status.textContent = 'Resolve failed — see console.';
+        dlog('popup: resolve error', String(err));
+      })
+      .finally(() => {
+        resolving = false;
+        void browser.storage.session.remove(`resolve:${tabId}`);
+        resolveBtn.disabled = false;
+        resolveBtn.textContent = RESOLVE_LABEL;
+      });
+  });
+}
 
 // permissions.request() must run inside this user gesture (not via the background SW).
 passiveEl.addEventListener('change', async () => {

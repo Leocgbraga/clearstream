@@ -24,3 +24,12 @@ export interface OkResponse {
 export interface ErrorResponse {
   error: string;
 }
+
+/** POWER build only: live resolve progress the background writes to storage.session (`resolve:<tabId>`)
+ *  and the popup subscribes to. Folds out of store builds with the rest of the resolver. */
+export interface ResolveProgress {
+  phase: 'harvest' | 'resolve' | 'done';
+  done: number; // mirrors resolved so far
+  total: number; // mirrors being resolved (after harvest + cap)
+  found: number; // distinct streams captured so far
+}

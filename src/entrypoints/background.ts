@@ -14,7 +14,7 @@ import { browser } from 'wxt/browser';
 import type { CapturedStream, ReplayHeaders } from '@/core/types';
 import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/core/detection';
 import { addStreams, clearTab, getStreams } from '@/core/storage';
-import type { ErrorResponse, Message, OkResponse, PlaybackResponse, StreamsResponse } from '@/core/messages';
+import type { ErrorResponse, Message, OkResponse, PlaybackResponse, ResolveProgress, StreamsResponse } from '@/core/messages';
 import { createHeaderInjector } from '@/core/header-injector';
 import { safeHttpUrl } from '@/core/url-safety';
 import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
@@ -230,24 +230,36 @@ const awaitCapture: AwaitCapture = (tabId, timeoutMs) =>
     resolverWaiters.set(tabId, entry);
   });
 
-/** Resolve a list of embed/mirror URLs → a deduped, ranked stream list (bounded concurrency). */
-async function resolveMirrors(urls: string[]): Promise<CapturedStream[]> {
+const resolveKey = (tabId: number): string => `resolve:${tabId}`;
+function reportResolve(tabId: number | undefined, p: ResolveProgress): void {
+  if (tabId != null) void browser.storage.session.set({ [resolveKey(tabId)]: p });
+}
+
+/** Resolve a list of embed/mirror URLs → a deduped, ranked stream list (bounded concurrency). When a
+ *  tabId is given, live progress is written to storage.session for the popup to subscribe to. */
+async function resolveMirrors(urls: string[], tabId?: number): Promise<CapturedStream[]> {
   const MAX = 8;
   const POOL = 3;
   const list = urls.slice(0, MAX);
   if (urls.length > MAX) dlog('resolver: capped', urls.length, '→', MAX, 'mirrors');
   const all: CapturedStream[] = [];
   let i = 0;
+  let done = 0;
+  reportResolve(tabId, { phase: 'resolve', done, total: list.length, found: 0 });
   const worker = async (): Promise<void> => {
     while (i < list.length) {
       const url = list[i++]!;
       const streams = await resolveInTab(url, awaitCapture);
       dlog('resolver:', url, '→', streams.length, 'stream(s)');
       all.push(...streams);
+      done++;
+      reportResolve(tabId, { phase: 'resolve', done, total: list.length, found: all.length });
     }
   };
   await Promise.all(Array.from({ length: Math.min(POOL, list.length) || 1 }, worker));
-  return probeMaster(dedupeAndRank(all));
+  const result = await probeMaster(dedupeAndRank(all));
+  reportResolve(tabId, { phase: 'done', done: list.length, total: list.length, found: result.length });
+  return result;
 }
 
 // Harvest the page's mirror/embed candidates: DOM scan via scripting (all frames) → pure ranking.
@@ -362,10 +374,14 @@ async function handle(
     case 'GET_STREAMS':
       return { streams: dedupeAndRank(await getStreams(msg.tabId)) };
 
-    case 'RESOLVE_PAGE':
+    case 'RESOLVE_PAGE': {
       // POWER only: harvest the page's mirror/embed candidates (or use provided urls), render each in a
       // hidden tab, return what resolves. Folds to [] in store builds → tree-shaken.
-      return POWER ? { streams: await resolveMirrors(msg.urls ?? (await harvestTab(msg.tabId))) } : { streams: [] };
+      if (!POWER) return { streams: [] };
+      if (msg.urls == null) reportResolve(msg.tabId, { phase: 'harvest', done: 0, total: 0, found: 0 });
+      const urls = msg.urls ?? (await harvestTab(msg.tabId));
+      return { streams: await resolveMirrors(urls, msg.tabId) };
+    }
 
     case 'OPEN_PLAYER': {
       // Reject any non-http(s) manifest URL before it can reach the player / header injection.
