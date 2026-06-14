@@ -17,10 +17,17 @@ import { addStreams, clearTab, getStreams } from '@/core/storage';
 import type { ErrorResponse, Message, OkResponse, PlaybackResponse, StreamsResponse } from '@/core/messages';
 import { createHeaderInjector } from '@/core/header-injector';
 import { safeHttpUrl } from '@/core/url-safety';
+import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
 
 const injector = createHeaderInjector();
 const playbackKey = (tabId: number): string => `playback:${tabId}`;
 const PLAYER_URL = browser.runtime.getURL('/player.html');
+
+async function getPlayback(tabId: number): Promise<CapturedStream[]> {
+  const key = playbackKey(tabId);
+  const got = await browser.storage.session.get(key);
+  return (got[key] as CapturedStream[] | undefined) ?? [];
+}
 
 /** Injected into each frame of the active tab (activeTab grant). Returns the manifest URLs already
  *  loaded (Performance API) or in the DOM, each paired with that frame's URL (used as referer). */
@@ -186,7 +193,10 @@ async function handle(
   // (defense in depth; today there's no externally_connectable/content script, but a content script
   // arrives in a later phase and must use a different, non-sensitive message type).
   if (
-    (msg.type === 'OPEN_PLAYER' || msg.type === 'PREPARE_MIRROR' || msg.type === 'GET_PLAYBACK') &&
+    (msg.type === 'OPEN_PLAYER' ||
+      msg.type === 'PREPARE_MIRROR' ||
+      msg.type === 'GET_PLAYBACK' ||
+      msg.type === 'REMEMBER_WORKING') &&
     !fromExtensionPage(sender)
   ) {
     return { error: 'forbidden' };
@@ -212,9 +222,7 @@ async function handle(
     case 'GET_PLAYBACK': {
       const tabId = sender.tab?.id;
       if (tabId == null) return { streams: [] };
-      const key = playbackKey(tabId);
-      const got = await browser.storage.session.get(key);
-      return { streams: (got[key] as CapturedStream[] | undefined) ?? [] };
+      return { streams: await getPlayback(tabId) };
     }
 
     case 'PREPARE_MIRROR': {
@@ -222,13 +230,36 @@ async function handle(
       // so headers are live before hls.js's first request (race-free).
       const tabId = sender.tab?.id;
       if (tabId == null) return { ok: true };
-      const key = playbackKey(tabId);
-      const got = await browser.storage.session.get(key);
-      const streams = (got[key] as CapturedStream[] | undefined) ?? [];
+      const streams = await getPlayback(tabId);
       const stream = streams[msg.index];
+      let headers: ReplayHeaders = stream ? effectiveHeaders(stream) : {};
+      // If this capture had no Referer/Cookie, fall back to what worked before on this host.
+      if (stream && !headers.referer && !headers.cookie) {
+        try {
+          const remembered = await recallWorkingHeaders(new URL(stream.manifestUrl).hostname);
+          if (remembered) headers = { ...remembered, ...headers };
+        } catch {
+          /* not a URL */
+        }
+      }
       // apply() with no headers clears any prior mirror's rule; hosts scope injection to the granted
       // CDNs so headers never leak to an unrelated host.
-      await injector.apply(tabId, stream ? effectiveHeaders(stream) : {}, hostsOf(streams));
+      await injector.apply(tabId, headers, hostsOf(streams));
+      return { ok: true };
+    }
+
+    case 'REMEMBER_WORKING': {
+      // The player reports a mirror is playing healthily → persist its headers for this CDN host.
+      const tabId = sender.tab?.id;
+      if (tabId == null) return { ok: true };
+      const stream = (await getPlayback(tabId))[msg.index];
+      if (stream) {
+        try {
+          await rememberWorkingHeaders(new URL(stream.manifestUrl).hostname, effectiveHeaders(stream));
+        } catch {
+          /* not a URL */
+        }
+      }
       return { ok: true };
     }
     default:

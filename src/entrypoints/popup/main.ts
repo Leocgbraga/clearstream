@@ -4,26 +4,32 @@ import type { CapturedStream } from '@/core/types';
 import type { Message, StreamsResponse } from '@/core/messages';
 
 const listEl = document.getElementById('list') as HTMLUListElement;
-const emptyEl = document.getElementById('empty') as HTMLParagraphElement;
+const emptyEl = document.getElementById('empty') as HTMLDivElement;
+const emptyMsg = document.getElementById('emptyMsg') as HTMLParagraphElement;
+const stepsEl = document.getElementById('steps') as HTMLOListElement;
 const scanBtn = document.getElementById('scan') as HTMLButtonElement;
 const passiveEl = document.getElementById('passive') as HTMLInputElement;
 
 const ALL_SITES = { origins: ['*://*/*'] };
+// Pages where content scripts / scanning can't run.
+const RESTRICTED = /^(chrome|edge|about|moz-extension|chrome-extension|view-source|https?:\/\/chrome\.google\.com\/webstore)/i;
 
 function send<T>(msg: Message): Promise<T> {
   return browser.runtime.sendMessage(msg) as Promise<T>;
 }
-
-async function activeTabId(): Promise<number | undefined> {
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  return tab?.id;
-}
-
 function hostOf(url: string): string {
   try {
     return new URL(url).host;
   } catch {
     return url;
+  }
+}
+function pathOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname + u.search;
+  } catch {
+    return '';
   }
 }
 
@@ -43,32 +49,68 @@ function uniqueOrigins(streams: CapturedStream[]): string[] {
 
 let current: CapturedStream[] = [];
 let currentTabId: number | undefined;
+let scanned = false;
+let restricted = false;
+
+function renderEmpty(): void {
+  listEl.hidden = true;
+  emptyEl.hidden = false;
+  if (restricted) {
+    emptyMsg.textContent = "ClearStream can't scan this page.";
+    stepsEl.hidden = true;
+  } else {
+    emptyMsg.textContent = scanned
+      ? 'No HLS stream found. Some sites only load the stream after you press play — try that, then scan again.'
+      : 'No stream detected on this tab yet.';
+    stepsEl.hidden = scanned;
+  }
+}
 
 function render(streams: CapturedStream[]): void {
   current = streams;
   listEl.replaceChildren();
   if (!streams.length) {
-    listEl.hidden = true;
-    emptyEl.hidden = false;
+    renderEmpty();
     return;
   }
   emptyEl.hidden = true;
   listEl.hidden = false;
+
   streams.forEach((s, i) => {
     const li = document.createElement('li');
+    if (i === 0) li.className = 'best';
 
-    const label = document.createElement('span');
-    label.className = 'url';
-    label.textContent = (i === 0 ? '★ ' : '') + hostOf(s.manifestUrl);
-    label.title = s.manifestUrl; // textContent/title only — never innerHTML (XSS-safe)
+    const info = document.createElement('div');
+    info.className = 'info';
+    const host = document.createElement('span');
+    host.className = 'host';
+    host.textContent = hostOf(s.manifestUrl);
+    host.title = s.manifestUrl; // textContent/title only — never innerHTML (XSS-safe)
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = (i === 0 ? 'Best · ' : '') + (s.kind === 'master' ? 'master playlist' : pathOf(s.manifestUrl));
+    sub.title = s.manifestUrl;
+    info.append(host, sub);
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = 'Watch';
-    btn.addEventListener('click', () => {
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'ghost';
+    copy.textContent = 'Copy';
+    copy.title = 'Copy stream URL';
+    copy.addEventListener('click', () => {
+      void navigator.clipboard.writeText(s.manifestUrl).then(() => {
+        copy.textContent = '✓';
+        setTimeout(() => (copy.textContent = 'Copy'), 1200);
+      });
+    });
+    const watch = document.createElement('button');
+    watch.type = 'button';
+    watch.textContent = 'Watch';
+    watch.addEventListener('click', () => {
       // Play this mirror first, the rest as failover fallbacks. Request host access for ALL their
-      // CDNs in one gesture (no-op if the passive toggle already granted) so failover can switch
-      // hosts and Phase 3 header injection can act on each.
+      // CDNs in one gesture (no-op if already granted) so failover + header injection can act on each.
       const ordered = [s, ...current.filter((x) => x.key !== s.key)];
       const open = (): void => {
         void send({ type: 'OPEN_PLAYER', streams: ordered });
@@ -79,18 +121,22 @@ function render(streams: CapturedStream[]): void {
       else open();
     });
 
-    li.append(label, btn);
+    actions.append(copy, watch);
+    li.append(info, actions);
     listEl.append(li);
   });
 }
 
 async function refresh(detect: boolean): Promise<void> {
-  currentTabId = await activeTabId();
-  if (currentTabId == null) return;
-  const res = await send<StreamsResponse>({
-    type: detect ? 'DETECT' : 'GET_STREAMS',
-    tabId: currentTabId,
-  });
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  currentTabId = tab?.id;
+  restricted = !!tab?.url && RESTRICTED.test(tab.url);
+  if (currentTabId == null || restricted) {
+    render([]);
+    return;
+  }
+  const res = await send<StreamsResponse>({ type: detect ? 'DETECT' : 'GET_STREAMS', tabId: currentTabId });
+  if (detect) scanned = true;
   render(res.streams ?? []);
 }
 

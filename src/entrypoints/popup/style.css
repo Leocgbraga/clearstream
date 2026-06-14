@@ -1,21 +1,31 @@
+/* The [hidden] attribute must win over our display rules (e.g. ul/#list use display:flex). */
+[hidden] {
+  display: none !important;
+}
 :root {
   color-scheme: dark;
+  --accent: #14b8a6;
+  --fg: #e6e6e6;
+  --muted: #9aa3a1;
+  --line: #1e2a28;
+  --card: #121817;
 }
 body {
   margin: 0;
-  width: 320px;
+  width: 340px;
   font: 13px/1.45 system-ui, -apple-system, sans-serif;
   background: #0b0f0e;
-  color: #e6e6e6;
+  color: var(--fg);
 }
 main {
-  padding: 12px 14px 14px;
+  padding: 12px 14px 12px;
 }
 h1 {
   margin: 0 0 10px;
   font-size: 15px;
   font-weight: 600;
-  color: #14b8a6;
+  color: var(--accent);
+  letter-spacing: 0.2px;
 }
 ul {
   list-style: none;
@@ -29,34 +39,78 @@ li {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 9px;
-  background: #121817;
-  border: 1px solid #1e2a28;
+  padding: 8px 9px;
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
-.url {
+li.best {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+.info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.host {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
+}
+.sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
 }
 #empty {
   margin: 0 0 10px;
-  color: #9aa3a1;
+  color: var(--muted);
+}
+#empty p {
+  margin: 0 0 8px;
+}
+#steps {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+#steps li {
+  display: list-item;
+  background: none;
+  border: 0;
+  padding: 1px 0;
 }
 button {
   font: inherit;
   cursor: pointer;
   color: #04211d;
-  background: #14b8a6;
+  background: var(--accent);
   border: 0;
   border-radius: 7px;
   padding: 6px 12px;
   font-weight: 600;
 }
+button:hover {
+  filter: brightness(1.08);
+}
 button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+button.ghost {
+  background: #142420;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  padding: 6px 9px;
 }
 #scan {
   width: 100%;
@@ -67,10 +121,16 @@ button:disabled {
   gap: 8px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid #1e2a28;
+  border-top: 1px solid var(--line);
   color: #c7cecc;
 }
 #passiveRow em {
-  color: #9aa3a1;
+  color: var(--muted);
   font-style: normal;
+}
+#trust {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: #6b7572;
+  text-align: center;
 }

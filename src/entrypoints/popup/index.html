@@ -8,13 +8,26 @@
   <body>
     <main id="app">
       <header><h1>ClearStream</h1></header>
+
       <ul id="list" hidden></ul>
-      <p id="empty" hidden>No streams found on this tab yet.</p>
+
+      <div id="empty" hidden>
+        <p id="emptyMsg">No stream detected on this tab yet.</p>
+        <ol id="steps">
+          <li>Press play on the video.</li>
+          <li>Click <strong>Find streams</strong> below.</li>
+          <li>Watch it clean.</li>
+        </ol>
+      </div>
+
       <button id="scan" type="button">Find streams on this page</button>
+
       <label id="passiveRow">
         <input type="checkbox" id="passive" />
         <span>Auto-detect on all sites <em>(grants site access)</em></span>
       </label>
+
+      <p id="trust">🔒 Runs on your device. No data leaves your browser.</p>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

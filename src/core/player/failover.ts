@@ -75,6 +75,8 @@ export interface FailoverHooks {
   /** Install header injection for mirror `index` before it plays (no-op for direct links). */
   prepareMirror(index: number): Promise<void>;
   onStatus(status: FailoverStatus): void;
+  /** Fired once when a source produces its first good fragment (used to remember working headers). */
+  onHealthy?(index: number): void;
 }
 
 export interface FailoverDeps {
@@ -122,12 +124,14 @@ export function createFailoverController(
 
   const healthy = (my: number): void => {
     if (my !== token) return; // a fragment from a superseded source
+    const wasFirst = !firstFrame;
     errStreak = 0;
     frozenTicks = 0;
     firstFrame = true;
     if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
     if (connectTimer !== undefined) clearTimeout(connectTimer);
     recoveryTimer = connectTimer = undefined;
+    if (wasFirst) hooks.onHealthy?.(index); // first good fragment for this source → it works
   };
 
   function onError(data: { fatal?: boolean; type?: string; details?: string }, my: number): void {
@@ -135,7 +139,7 @@ export function createFailoverController(
     const action = classifyError(data);
     if (action === 'ignore') return;
     if (action === 'degrade') {
-      if (++errStreak >= T.degradedStreak) triggerFailover('Stream degraded');
+      if (++errStreak >= T.degradedStreak) triggerFailover('This source got choppy');
       return;
     }
     const hls = handle?.hls;
@@ -148,20 +152,20 @@ export function createFailoverController(
       hls.recoverMediaError();
       armRecoveryDeadline(my);
     } else {
-      triggerFailover(`Fatal error (${data.details ?? data.type ?? 'unknown'})`);
+      triggerFailover('This source stopped');
     }
   }
 
   function armRecoveryDeadline(my: number): void {
     if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
     recoveryTimer = setTimeout(() => {
-      if (my === token && !destroyed) triggerFailover('Source unrecoverable');
+      if (my === token && !destroyed) triggerFailover('This source stopped');
     }, T.recoveryMs);
   }
 
   function armConnectDeadline(my: number): void {
     connectTimer = setTimeout(() => {
-      if (my === token && !destroyed && !firstFrame) triggerFailover('Source did not start');
+      if (my === token && !destroyed && !firstFrame) triggerFailover("This source wouldn't start");
     }, T.connectMs);
   }
 
@@ -181,7 +185,7 @@ export function createFailoverController(
       if (video.paused || video.readyState < 2) return;
       if (video.currentTime <= lastTime + 0.05) {
         if (++frozenTicks >= T.maxFrozenTicks && Date.now() - playStartTs > T.minPlayMs) {
-          triggerFailover('Playback stalled');
+          triggerFailover('This source froze');
         }
       } else {
         frozenTicks = 0;
@@ -204,7 +208,7 @@ export function createFailoverController(
     hooks.onStatus({
       index: i,
       total: streams.length,
-      message: reason ? `${reason} — switched to source ${i + 1} of ${streams.length}` : '',
+      message: reason ? `${reason}. Trying source ${i + 1} of ${streams.length}…` : '',
     });
 
     // Install this mirror's headers before any request. A failed prep must not leave us wedged
@@ -212,7 +216,7 @@ export function createFailoverController(
     try {
       await hooks.prepareMirror(i);
     } catch {
-      if (my === token && !destroyed) void play(i + 1, 'Could not prepare source');
+      if (my === token && !destroyed) void play(i + 1, "Couldn't set up this source");
       return;
     }
     if (my !== token || destroyed) return; // superseded while awaiting
