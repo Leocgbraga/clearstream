@@ -80,6 +80,37 @@ try {
   // baseline. A leaked ad tab (suppression failure) would push hAfter above hBefore.
   results.harvestCleanup = { ok: hAfter <= hBefore, before: hBefore, after: hAfter };
 
+  // --- Schedule lister: two structurally-different layouts must parse to the same EventItem shape,
+  // proving the parser is domain-agnostic (matchup from link text vs. from slug/sibling). ---
+  const listEvents = async (fixture) => {
+    const url = `${srv.urls.PAGES}/fixtures/${fixture}`;
+    const page = await ctx.newPage();
+    await page.goto(url);
+    const tabId = await sw.evaluate((u) => chrome.tabs.query({}).then((t) => t.find((x) => x.url === u)?.id ?? -1), url);
+    const res = await popup.evaluate((id) => chrome.runtime.sendMessage({ type: 'LIST_EVENTS', tabId: id }), tabId);
+    await page.close();
+    return res?.events ?? [];
+  };
+  const cards = await listEvents('schedule-cards');
+  const rows = await listEvents('schedule-rows');
+  results.eventsCards = {
+    ok:
+      cards.length === 3 &&
+      cards[0]?.status === 'live' &&
+      /Red Sox vs Texas Rangers/i.test(cards[0]?.title ?? '') &&
+      cards[2]?.status === 'finished' &&
+      !cards.some((e) => /facebook/i.test(e.url) || /\/nba$/i.test(e.url)),
+    titles: cards.map((e) => `${e.status}:${e.title}`),
+  };
+  results.eventsRows = {
+    ok:
+      rows.length === 2 &&
+      rows.some((e) => e.title === 'Lakers vs Celtics' && e.status === 'live') &&
+      rows.some((e) => e.title === 'Bruins vs Rangers') &&
+      !rows.some((e) => /\/nba$/i.test(e.url) || /t\.me/i.test(e.url)),
+    titles: rows.map((e) => `${e.status}:${e.title}`),
+  };
+
   // Popup UI (power build): the "✨ Resolve streams" button must be present + wired. The full
   // button→active-tab→render happy path isn't auto-driven here — Playwright can't bind a real
   // browser-action popup to an underlying active tab — so resolution itself is proven by the direct
@@ -105,6 +136,8 @@ try {
   console.log(`  ${results.harvest.masterWon ? '✓' : '✗'} master mirror ranked first  ${JSON.stringify({ top: results.harvest.top })}`);
   console.log(`  ${results.harvestCleanup.ok ? '✓' : '✗'} popunder suppressed/cleaned ${JSON.stringify(results.harvestCleanup)}`);
   console.log(`  ${results.popupUi.ok ? '✓' : '✗'} power popup resolve button  ${JSON.stringify(results.popupUi)}`);
+  console.log(`  ${results.eventsCards.ok ? '✓' : '✗'} schedule (cards layout)     ${JSON.stringify(results.eventsCards)}`);
+  console.log(`  ${results.eventsRows.ok ? '✓' : '✗'} schedule (rows layout)      ${JSON.stringify(results.eventsRows)}`);
 
   const allOk =
     results.single.ok &&
@@ -112,7 +145,9 @@ try {
     results.harvest.ok &&
     results.harvest.masterWon &&
     results.harvestCleanup.ok &&
-    results.popupUi.ok;
+    results.popupUi.ok &&
+    results.eventsCards.ok &&
+    results.eventsRows.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);
   process.exitCode = allOk ? 0 : 1;
 } finally {

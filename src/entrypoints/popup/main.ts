@@ -1,7 +1,7 @@
 import './style.css';
 import { browser } from 'wxt/browser';
 import type { CapturedStream } from '@/core/types';
-import type { Message, ResolveProgress, StreamsResponse } from '@/core/messages';
+import type { EventItem, EventsResponse, Message, ResolveProgress, StreamsResponse } from '@/core/messages';
 import { t } from '@/core/i18n';
 import { DEBUG, dlog } from '@/core/debug';
 import { POWER } from '@/core/power';
@@ -250,6 +250,64 @@ if (POWER) {
         resolveBtn.textContent = RESOLVE_LABEL;
       });
   });
+
+  // --- Schedule/event lister: on a games-listing page (streameast/crackstreams/…), surface the games
+  // so you can jump straight to one instead of clicking through the schedule's ad traps. Domain-agnostic
+  // (the background's parseEvents reads the matchup from link text / slug / row — no per-site code). ---
+  const eventsWrap = document.createElement('section');
+  const eventsHdr = document.createElement('p');
+  eventsHdr.style.cssText = 'margin:2px 0 8px;font-size:12px;font-weight:600;color:var(--fg)';
+  const eventsList = document.createElement('ul');
+  eventsWrap.append(eventsHdr, eventsList);
+
+  const badgeOf = (e: EventItem): string =>
+    e.status === 'live' ? '🔴 LIVE' : e.status === 'finished' ? '⚪ done' : e.when ? `⏳ ${e.when}` : '⏳ soon';
+
+  function renderEvents(events: EventItem[]): void {
+    eventsHdr.textContent = `📅 Live & upcoming (${events.length})`;
+    eventsList.replaceChildren();
+    for (const e of events) {
+      const li = document.createElement('li');
+      if (e.status === 'finished') li.style.opacity = '0.55';
+      const info = document.createElement('div');
+      info.className = 'info';
+      const title = document.createElement('span');
+      title.className = 'host';
+      title.textContent = e.title; // textContent/title only — never innerHTML (XSS-safe)
+      title.title = e.title;
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = [badgeOf(e), e.sport].filter(Boolean).join(' · ');
+      info.append(title, sub);
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'ghost';
+      open.textContent = 'Open';
+      open.title = 'Open this game’s page (skips the schedule’s click traps)';
+      open.addEventListener('click', () => {
+        void browser.tabs.create({ url: e.url, active: true });
+        window.close();
+      });
+      actions.append(open);
+      li.append(info, actions);
+      eventsList.append(li);
+    }
+    if (!eventsWrap.isConnected) document.querySelector('#app header')?.insertAdjacentElement('afterend', eventsWrap);
+  }
+
+  // On open, parse the active tab's schedule (top frame) and list its games. The power build holds
+  // <all_urls>, so this needs no gesture; on a non-schedule page the list is empty and nothing shows.
+  void (async () => {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id == null || (tab.url != null && RESTRICTED.test(tab.url))) return;
+    const res = await send<EventsResponse>({ type: 'LIST_EVENTS', tabId: tab.id });
+    const events = res.events ?? [];
+    dlog('popup: listed', events.length, 'event(s) on tab', tab.id);
+    if (events.length) renderEvents(events);
+  })();
 }
 
 // permissions.request() must run inside this user gesture (not via the background SW).

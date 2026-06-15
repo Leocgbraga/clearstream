@@ -11,7 +11,7 @@ const SENTINEL = 'CS_POWER_RESOLVER'; // comment marker in every resolver core m
 // User-facing POWER-only strings. Unlike the comment sentinel (stripped by minification), these are
 // string literals that SURVIVE minification — so they catch a popup "Resolve" block that failed to
 // tree-shake even if the resolver core modules were correctly dropped. Keep in sync with popup/main.ts.
-const POWER_UI_MARKERS = ['Resolve streams', 'Resolving mirrors'];
+const POWER_UI_MARKERS = ['Resolve streams', 'Resolving mirrors', 'Live & upcoming'];
 let failed = 0;
 
 try {

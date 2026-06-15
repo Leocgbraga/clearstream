@@ -1,5 +1,8 @@
 // Popup/player ↔ background messages (one-time request/response).
 import type { CapturedStream } from './types';
+import type { EventItem } from './resolver/events';
+
+export type { EventItem };
 
 export type Message =
   | { type: 'DETECT'; tabId: number } // active-tab scan via activeTab + scripting
@@ -9,10 +12,16 @@ export type Message =
   | { type: 'PREPARE_MIRROR'; index: number } // player → bg: install header injection for mirror N before it plays
   | { type: 'REMEMBER_WORKING'; index: number } // player → bg: mirror N is playing healthily, persist its headers
   | { type: 'CONTENT_STREAM'; url: string; pageUrl: string } // deep-capture content script → bg: found an .m3u8
-  | { type: 'RESOLVE_PAGE'; tabId: number; urls?: string[] }; // popup → bg (POWER): resolve mirrors → ranked streams
+  | { type: 'RESOLVE_PAGE'; tabId: number; urls?: string[] } // popup → bg (POWER): resolve mirrors → ranked streams
+  | { type: 'LIST_EVENTS'; tabId: number } // popup → bg (POWER): parse the page's schedule → game list
+  | { type: 'RESOLVE_EVENT'; url: string; tabId: number }; // popup → bg (POWER): resolve one game → ranked streams
 
 export interface StreamsResponse {
   streams: CapturedStream[];
+}
+/** POWER build only: the parsed game list for a schedule page. */
+export interface EventsResponse {
+  events: EventItem[];
 }
 export interface PlaybackResponse {
   streams: CapturedStream[];

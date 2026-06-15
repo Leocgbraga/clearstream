@@ -14,7 +14,9 @@ import { browser } from 'wxt/browser';
 import type { CapturedStream, ReplayHeaders } from '@/core/types';
 import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/core/detection';
 import { addStreams, clearTab, getStreams } from '@/core/storage';
-import type { ErrorResponse, Message, OkResponse, PlaybackResponse, ResolveProgress, StreamsResponse } from '@/core/messages';
+import type { ErrorResponse, EventsResponse, Message, OkResponse, PlaybackResponse, ResolveProgress, StreamsResponse } from '@/core/messages';
+import { parseEvents } from '@/core/resolver/events';
+import type { EventItem, LdEvent, RawAnchor } from '@/core/resolver/events';
 import { createHeaderInjector } from '@/core/header-injector';
 import { safeHttpUrl } from '@/core/url-safety';
 import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
@@ -293,6 +295,76 @@ async function harvestTab(tabId: number): Promise<string[]> {
   }
 }
 
+// Schedule scan (POWER): per-anchor {href,text,slug,context} + JSON-LD events, structure-agnostic (no
+// per-site selectors). `parseEvents` (pure) turns this into the ranked game list. Injected via scripting.
+function scanForEvents(): {
+  anchors: { href: string; text: string; slug: string; context: string }[];
+  jsonld: { name: string; startDate?: string; url?: string }[];
+} {
+  const norm = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
+  const slugOf = (href: string): string => {
+    try {
+      const segs = new URL(href).pathname.split('/').filter(Boolean);
+      for (let i = segs.length - 1; i >= 0; i--) if (/[a-z]/i.test(segs[i]!)) return segs[i]!;
+      return segs[segs.length - 1] ?? '';
+    } catch {
+      return '';
+    }
+  };
+  // This game's card/row = the largest ancestor that still contains ONLY this one link (a multi-link
+  // ancestor is the list/grid, not a single card). Structure-agnostic; never grabs the whole schedule.
+  const cardText = (el: Element): string => {
+    let node: Element | null = el.parentElement;
+    let best = '';
+    for (let i = 0; i < 5 && node; i++) {
+      if (node.querySelectorAll('a[href]').length > 1) break;
+      const t = norm((node as HTMLElement).innerText || node.textContent); // innerText keeps word boundaries
+      if (t.length > 400) break;
+      best = t;
+      node = node.parentElement;
+    }
+    return best;
+  };
+  const anchors = [...document.querySelectorAll('a[href]')].slice(0, 600).map((a) => ({
+    href: (a as HTMLAnchorElement).href,
+    text: norm((a as HTMLElement).innerText || a.textContent).slice(0, 200),
+    slug: slugOf((a as HTMLAnchorElement).href),
+    context: cardText(a).slice(0, 300),
+  }));
+  const jsonld: { name: string; startDate?: string; url?: string }[] = [];
+  for (const s of [...document.querySelectorAll('script[type="application/ld+json"]')].slice(0, 20)) {
+    try {
+      const data: unknown = JSON.parse(s.textContent ?? 'null');
+      const arr: unknown[] = Array.isArray(data) ? data : ((data as { '@graph'?: unknown[] })?.['@graph'] ?? [data]);
+      for (const it of arr) {
+        const o = it as { '@type'?: unknown; name?: unknown; startDate?: unknown; url?: unknown };
+        const types = Array.isArray(o?.['@type']) ? o['@type'] : [o?.['@type']];
+        if (types.some((t) => typeof t === 'string' && /Event/i.test(t)) && o?.name) {
+          jsonld.push({ name: String(o.name), startDate: o.startDate ? String(o.startDate) : undefined, url: o.url ? String(o.url) : undefined });
+        }
+      }
+    } catch {
+      /* malformed ld+json */
+    }
+  }
+  return { anchors, jsonld };
+}
+
+/** Parse the active tab's schedule page into a ranked game list (top frame only). */
+async function listEventsForTab(tabId: number): Promise<EventItem[]> {
+  try {
+    const tab = await browser.tabs.get(tabId);
+    const [res] = await browser.scripting.executeScript({ target: { tabId }, func: scanForEvents });
+    const v = res?.result as { anchors: RawAnchor[]; jsonld: LdEvent[] } | undefined;
+    if (!v) return [];
+    const events = parseEvents({ anchors: v.anchors, jsonld: v.jsonld, pageUrl: tab.url ?? '' });
+    dlog('events: parsed', events.length, 'game(s) from tab', tabId);
+    return events;
+  } catch {
+    return [];
+  }
+}
+
 // If the best result is only a variant, probe its sibling master playlists and prefer a real master.
 async function probeMaster(streams: CapturedStream[]): Promise<CapturedStream[]> {
   const top = streams[0];
@@ -349,7 +421,7 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
 async function handle(
   msg: Message,
   sender: { tab?: { id?: number }; url?: string; frameId?: number },
-): Promise<StreamsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
+): Promise<StreamsResponse | EventsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
   // Sensitive messages — only our own extension pages (popup/player) may send them (defense in
   // depth). Playback messages install header rules / read stashed streams; DETECT/GET_STREAMS read a
   // tab's captures by a caller-supplied tabId, so gate them too. The deep-capture content script that
@@ -361,7 +433,9 @@ async function handle(
       msg.type === 'REMEMBER_WORKING' ||
       msg.type === 'DETECT' ||
       msg.type === 'GET_STREAMS' ||
-      msg.type === 'RESOLVE_PAGE') &&
+      msg.type === 'RESOLVE_PAGE' ||
+      msg.type === 'LIST_EVENTS' ||
+      msg.type === 'RESOLVE_EVENT') &&
     !fromExtensionPage(sender)
   ) {
     return { error: 'forbidden' };
@@ -382,6 +456,10 @@ async function handle(
       const urls = msg.urls ?? (await harvestTab(msg.tabId));
       return { streams: await resolveMirrors(urls, msg.tabId) };
     }
+
+    case 'LIST_EVENTS':
+      // POWER only: parse this tab's schedule page into a game list. Folds to [] in store builds.
+      return POWER ? { events: await listEventsForTab(msg.tabId) } : { events: [] };
 
     case 'OPEN_PLAYER': {
       // Reject any non-http(s) manifest URL before it can reach the player / header injection.

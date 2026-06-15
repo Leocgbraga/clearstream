@@ -169,6 +169,37 @@ const FIXTURES = {
       `<script>fetch(${JSON.stringify(LO)});setTimeout(function(){try{window.open(${JSON.stringify(`${AD}/ad`)},'_blank');}catch(e){}},150);</script>`,
     ),
 
+  // --- F. schedule/event lister (POWER) — two structurally-different layouts proving the parser is
+  // domain-agnostic (no per-site selectors). Each game links to an event page that lists mirror links. ---
+  // streameast-like: the <a> wraps the whole card; the matchup is in the anchor TEXT.
+  'schedule-cards': () =>
+    doc(
+      'schedule-cards',
+      `<h1>Today's Games</h1>
+       <a href="/fixtures/event-1">⚾ Boston Red Sox vs Texas Rangers · MLB · LIVE</a>
+       <a href="/fixtures/event-2">⚽ Sweden vs Tunisia · Soccer · 10:00 PM ET · 2 hours from now</a>
+       <a href="/fixtures/event-3">⚾ Los Angeles Angels vs Tampa Bay Rays · MLB · Finished</a>
+       <a href="https://facebook.com/share/x">Share on Facebook</a>
+       <a href="/fixtures/nba">NBA</a>`,
+    ),
+  // crackstreams-like: generic link text; the matchup is in the URL slug (row 1) or a sibling heading (row 2).
+  'schedule-rows': () =>
+    doc(
+      'schedule-rows',
+      `<h1>Live Streams</h1>
+       <div class="row"><h3>NBA · Lakers vs Celtics · 8:00 PM ET · LIVE</h3><a href="/fixtures/event-lakers-vs-celtics-99">Watch HD</a></div>
+       <div class="row"><h3>NHL · Bruins vs Rangers · 7:30 PM ET</h3><a href="/fixtures/event-2?g=bruins">Watch</a></div>
+       <div class="row"><a href="/fixtures/nba">NBA Schedule</a></div>
+       <a href="https://t.me/sharelink">Telegram</a>`,
+    ),
+  // Event pages (mirror lists) the schedule links point to; event-1 + the lakers page carry resolvable mirrors.
+  'event-1': () => doc('event-1', `<h1>Boston Red Sox vs Texas Rangers</h1><a href="/fixtures/embed-b">Link 1 HD</a><a href="/fixtures/embed-a">Server 2 SD</a>`),
+  'event-2': () => doc('event-2', `<h1>Sweden vs Tunisia</h1><a href="/fixtures/embed-a">Link 1</a>`),
+  'event-3': () => doc('event-3', `<h1>Los Angeles Angels vs Tampa Bay Rays</h1><p>Finished</p>`),
+  'event-lakers-vs-celtics-99': () =>
+    doc('event-lakers', `<h1>Lakers vs Celtics</h1><a href="/fixtures/embed-b">Link 1 HD</a><a href="/fixtures/embed-a">Server 2 SD</a>`),
+  nba: () => doc('nba', `<h1>NBA</h1>`),
+
   // --- helpers used by the iframe fixtures (served from any origin) ---
   _leaf: () => doc('_leaf', `<script>var u=new URLSearchParams(location.search).get('u');if(u)fetch(u);</script>`),
   _nest: () =>
