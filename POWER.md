@@ -58,13 +58,22 @@ directly so you skip clicking through the schedule's ad-trap links:
 - **▶ Watch** — one click: resolve that game end-to-end (open its event page in hidden tabs, harvest its
   mirrors, resolve, play the best) — every ad page skipped. A 2-level use of the resolver.
 
-**Domain-agnostic — no per-site selectors.** The parser ([`events.ts`](src/core/resolver/events.ts))
-scores each link from orthogonal signals (a "Team A vs Team B" matchup in the link text, the URL slug,
-or the enclosing row; a sport/league keyword; a live/time cue) and reads the title from whichever source
-has it (text → slug → row → JSON-LD), with status/sport read from each game's own card/row. The same
-code lights up streameast-style cards, crackstreams-style slugs, and table/grid schedules. Known limit:
-games whose links/metadata only appear after a click/JS interaction aren't in the static scan — the
-debug build's console shows what was parsed.
+**Domain-agnostic — no per-site selectors.** The scan ([`background.ts` `scanForEvents`] across all
+frames) harvests both `<a href>` **and clickable non-anchors** — `onclick` / `data-href` `<div>`s, the
+way real sites (e.g. streameast) render game tiles to fire popunders + dodge scrapers, recovering the
+target URL from the onclick handler. The pure parser ([`events.ts`](src/core/resolver/events.ts)) then
+scores each candidate from orthogonal signals (a "Team A vs Team B" matchup in the tile text, the URL
+slug, or the enclosing card/row; a sport/league keyword; a live/time cue) and reads the title from
+whichever source has it (text → slug → row → JSON-LD), with status/sport read from each game's own
+card/row. Verified against the real streameast homepage structure (23 onclick-`<div>` cards →
+`/links/<slug>`). The 🔧 debug panel shows a per-frame readout (a[href] / clickable / "vs" counts +
+samples) so any live page reveals exactly what it has.
+
+Known limits: (1) games rendered by site JS that never populates the readable DOM (e.g. crackstreams'
+`/league/*` pages use obfuscated JS) won't appear — the 🔧 readout confirms this per site. (2) Sites
+whose **homepage is only sport categories** (crackstreams) list nothing on the homepage; the games are
+on the `/league/<sport>` pages. A full-domain crawl (render each category page, aggregate) is the planned
+fix for that case — deferred pending confirmation it's needed (see memory).
 
 ## Build & install
 
