@@ -110,14 +110,17 @@ try {
       !rows.some((e) => /\/nba$/i.test(e.url) || /t\.me/i.test(e.url)),
     titles: rows.map((e) => `${e.status}:${e.title}`),
   };
-  // Games rendered as clickable <div>s (onclick/data-href), no <a href> — must still be recovered.
+  // Real streameast shape: games are onclick <div> cards (no <a href>) → /links/<slug>; header league
+  // anchors must drop. Proves the scan handles the actual click-trapped markup we probed.
   const onclick = await listEvents('schedule-onclick');
   results.eventsOnclick = {
     ok:
-      onclick.length === 2 &&
-      onclick.some((e) => e.title === 'Red Sox vs Rangers' && e.status === 'live') &&
-      onclick.some((e) => e.title === 'Sweden vs Tunisia') &&
-      !onclick.some((e) => /\/nba$/i.test(e.url)),
+      onclick.length === 3 &&
+      onclick.some((e) => e.title === 'Ivory Coast vs Ecuador' && e.status === 'live') &&
+      onclick.some((e) => e.title === 'RAW #1725' && e.status === 'live') && // non-"vs" event kept
+      onclick.some((e) => e.title === 'Sweden vs Tunisia' && e.status === 'upcoming') &&
+      onclick.every((e) => /\/links\//.test(e.url)) && // recovered the /links/ target from onclick
+      !onclick.some((e) => /\/category\//.test(e.url)), // league header anchors dropped
     titles: onclick.map((e) => `${e.status}:${e.title}`),
   };
 

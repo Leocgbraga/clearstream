@@ -192,15 +192,27 @@ const FIXTURES = {
        <div class="row"><a href="/fixtures/nba">NBA Schedule</a></div>
        <a href="https://t.me/sharelink">Telegram</a>`,
     ),
-  // onclick/data-* layout: games are clickable <div>s with NO <a href> (common — fires popunders +
-  // dodges scrapers). The scan must recover the target from onclick/data-href and still list them.
+  // Faithful to the REAL streameast homepage (probed 2026-06-14): each game is a click-trapped
+  // <div onclick="window.location.href='/links/<slug>'"> card wrapping a .event-title child — NO <a href>
+  // (that's the "3 ad-clicks" gauntlet). Header league links are plain category anchors that must drop.
+  // The scan must recover the /links/ target from the onclick handler and still list every game.
   'schedule-onclick': () =>
     doc(
       'schedule-onclick',
-      `<h1>Games</h1>
-       <div class="g" onclick="window.open('/fixtures/event-1','_blank')">⚾ Red Sox vs Rangers · MLB · LIVE</div>
-       <div class="g" data-href="/fixtures/event-2">⚽ Sweden vs Tunisia · Soccer · 2 hours from now</div>
-       <div class="nav" onclick="location.href='/fixtures/nba'">NBA</div>`,
+      `<nav><a href="/category/nfl">NFL</a> <a href="/category/nba">NBA</a> <a href="/category/ufc">UFC</a></nav>
+       <h1>Today's Upcoming Games (3)</h1>
+       <div class="event-card" onclick="window.location.href='/links/ivory-coast-vs-ecuador-2391734'">
+         <div class="emoji">⚽</div><div class="event-title">Ivory Coast vs Ecuador</div>
+         <div class="event-time">Sunday, Jun 14, 2026, 7:00 PM ET</div><div class="event-meta">Soccer LIVE</div>
+       </div>
+       <div class="event-card" onclick="window.location.href='/links/raw-1725-2391999'">
+         <div class="emoji">🤼</div><div class="event-title">RAW #1725</div>
+         <div class="event-time">Sunday, Jun 14, 2026, 8:00 PM ET</div><div class="event-meta">WWE LIVE</div>
+       </div>
+       <div class="event-card" onclick="window.location.href='/links/sweden-vs-tunisia-2391888'">
+         <div class="emoji">⚽</div><div class="event-title">Sweden vs Tunisia</div>
+         <div class="event-time">Monday, Jun 15, 2026, 10:00 PM ET</div><div class="event-meta">Soccer 22 minutes from now</div>
+       </div>`,
     ),
   // Event pages (mirror lists) the schedule links point to; event-1 + the lakers page carry resolvable mirrors.
   'event-1': () => doc('event-1', `<h1>Boston Red Sox vs Texas Rangers</h1><a href="/fixtures/embed-b">Link 1 HD</a><a href="/fixtures/embed-a">Server 2 SD</a>`),
