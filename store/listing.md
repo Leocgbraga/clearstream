@@ -64,5 +64,5 @@ in a clean, ad-free player.
   fetch the stream directly (bypassing CORS) instead of through any server of ours.
 
 ## Links
-- Privacy policy: `PRIVACY.md` in the repository
-- Source code & docs: the GitHub repository (MIT)
+- Privacy policy: https://leocgbraga.github.io/clearstream/privacy.html
+- Source code & docs: https://github.com/leocgbraga/clearstream (MIT)
