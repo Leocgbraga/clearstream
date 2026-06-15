@@ -47,7 +47,7 @@ const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2300}-\u{27BF}\u{2B00}-\u
 // Where the team name ends and metadata begins: separators, days, months, clock/am-pm, status, tz.
 // NB month names are whole-word (jan/january…), NOT `mar[a-z]*` — that ate teams like Mar-lins / Mar-iners.
 const STOP =
-  /[·|,\n]|\b(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?)\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|\b(?:live|finished|ended|final|today|tomorrow)\b|\bfrom\s+now\b|\b(?:ET|EST|EDT|PT|PST|PDT|CT|GMT|UTC|BST)\b/i;
+  /[·|,:\n]|\b(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?)\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|\b(?:live|finished|ended|final|today|tomorrow|starts?|starting)\b|\bfrom\s+now\b|\b(?:ET|EST|EDT|PT|PST|PDT|CT|GMT|UTC|BST)\b/i;
 const LEAGUE_LEAD = /^(?:mlb|nba|nfl|nhl|ncaa|ufc|mma|wwe|aew|epl|mls|atp|wta|pga|f1)\b[\s:–-]*/i;
 
 // Sport/league badges. Keyword first; emoji as a fallback for icon-only schedules.
@@ -225,6 +225,82 @@ export function parseEvents(input: EventsInput, max = 50): EventItem[] {
     const tk = it.title.toLowerCase();
     if (seen.has(tk)) continue;
     seen.add(tk);
+    out.push(it);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// Section/category links a landing page exposes (e.g. crackstreams' /league/nflstreams). A
+// category-only homepage lists no games itself; a crawl dives into each of these to aggregate them.
+// Domain-agnostic: a same-host link whose path/text names a sport/league or section, that is NOT
+// itself an event (no matchup — those are real games parseEvents already handles).
+const CATEGORY =
+  /\b(nfl|nba|wnba|mlb|nhl|ncaa[bf]?|mma|ufc|box(?:ing)?|soccer|football|futbol|tennis|atp|wta|f1|formula|motogp|nascar|wwe|aew|wrestl|golf|pga|rugby|cricket|ipl|hockey|baseball|basketball|epl|laliga|bundesliga|ligue1|mls|league|category)\b/i;
+
+/** Pick the section/category links to crawl from a landing page's anchors. Pure. Same-host, keyword
+ *  in path/text, not the page itself, not NOISE, not an event link. Deduped + capped. */
+export function categoryLinks(anchors: RawAnchor[], pageUrl: string, max = 12): string[] {
+  let host = '';
+  try {
+    host = new URL(pageUrl).host;
+  } catch {
+    /* pageUrl not a URL */
+  }
+  let pageKey = '';
+  try {
+    pageKey = canonicalKey(pageUrl);
+  } catch {
+    /* */
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const a of anchors) {
+    const safe = safeHttpUrl(a.href);
+    if (!safe) continue;
+    let u: URL;
+    try {
+      u = new URL(safe);
+    } catch {
+      continue;
+    }
+    if (host && u.host !== host) continue; // same site only
+    if (u.pathname === '/' || u.pathname === '') continue; // the homepage itself
+    const key = canonicalKey(safe);
+    if (!key || key === pageKey || seen.has(key)) continue;
+    const text = a.text ?? '';
+    if (NOISE.test(safe) || NOISE.test(text)) continue;
+    if (!CATEGORY.test(u.pathname) && !CATEGORY.test(text)) continue; // looks like a section
+    const slug = a.slug ?? slugOf(safe) ?? '';
+    if (SLUG_VS.test(slug) || SEP.test(text)) continue; // …but it's a game, not a category
+    seen.add(key);
+    out.push(safe);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/** Merge per-page event lists from a crawl into one deduped, live-first list (url + title). Pure. */
+export function mergeEvents(lists: EventItem[][], max = 50): EventItem[] {
+  const byKey = new Map<string, EventItem>();
+  for (const list of lists) {
+    for (const it of list) {
+      let key = it.url;
+      try {
+        key = canonicalKey(it.url);
+      } catch {
+        /* keep raw url as key */
+      }
+      const prev = byKey.get(key);
+      if (!prev || it.score > prev.score) byKey.set(key, it);
+    }
+  }
+  const seenTitle = new Set<string>();
+  const out: EventItem[] = [];
+  for (const it of [...byKey.values()].sort((a, b) => RANK[a.status] - RANK[b.status] || b.score - a.score)) {
+    const tk = it.title.toLowerCase();
+    if (seenTitle.has(tk)) continue;
+    seenTitle.add(tk);
     out.push(it);
     if (out.length >= max) break;
   }

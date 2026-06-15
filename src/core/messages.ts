@@ -14,6 +14,7 @@ export type Message =
   | { type: 'CONTENT_STREAM'; url: string; pageUrl: string } // deep-capture content script → bg: found an .m3u8
   | { type: 'RESOLVE_PAGE'; tabId: number; urls?: string[] } // popup → bg (POWER): resolve mirrors → ranked streams
   | { type: 'LIST_EVENTS'; tabId: number } // popup → bg (POWER): parse the page's schedule → game list
+  | { type: 'CRAWL_SCHEDULE'; tabId: number } // popup → bg (POWER): follow category links → aggregated game list
   | { type: 'RESOLVE_EVENT'; url: string; tabId: number } // popup → bg (POWER): resolve one game → ranked streams
   | { type: 'EVENTS_DEBUG'; tabId: number }; // popup(debug) → bg (POWER): event-scan diagnostics for the 🔧 panel
 

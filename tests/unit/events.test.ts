@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEvents, matchup, titleFromSlug, sportOf, statusOf } from '@/core/resolver/events';
+import { parseEvents, matchup, titleFromSlug, sportOf, statusOf, categoryLinks, mergeEvents } from '@/core/resolver/events';
 
 describe('matchup', () => {
   it('extracts a clean "A vs B" from a noisy card, stripping emoji + trailing metadata', () => {
@@ -50,6 +50,48 @@ describe('sportOf / statusOf', () => {
     expect(statusOf('Soccer 2 hours from now').status).toBe('upcoming');
     expect(statusOf('starts 10:00 PM ET').status).toBe('upcoming');
     expect(statusOf('Lakers vs Celtics').status).toBe('unknown');
+  });
+});
+
+describe('categoryLinks', () => {
+  it('picks same-host sport/league sections; drops the homepage, event links, noise, cross-host', () => {
+    const cats = categoryLinks(
+      [
+        { href: 'https://crackstreams.mx/league/nflstreams', text: 'NFL', slug: 'nflstreams' },
+        { href: 'https://crackstreams.mx/league/mmastreams', text: 'MMA', slug: 'mmastreams' },
+        { href: 'https://crackstreams.mx/', text: 'Home', slug: '' }, // homepage → drop
+        { href: 'https://crackstreams.mx/stream/lakers-vs-celtics', text: 'Lakers vs Celtics', slug: 'lakers-vs-celtics' }, // event → drop
+        { href: 'https://facebook.com/x', text: 'Facebook' }, // noise + cross-host → drop
+        { href: 'https://other.tld/league/nba', text: 'NBA', slug: 'nba' }, // cross-host → drop
+      ],
+      'https://crackstreams.mx/',
+    );
+    expect(cats).toEqual(['https://crackstreams.mx/league/nflstreams', 'https://crackstreams.mx/league/mmastreams']);
+  });
+  it('caps the number of category pages', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ href: `https://s.tld/league/nba${i}`, text: 'NBA', slug: `nba${i}` }));
+    expect(categoryLinks(many, 'https://s.tld/', 12)).toHaveLength(12);
+  });
+});
+
+describe('mergeEvents', () => {
+  it('dedupes across pages (by url + title) and keeps live-first order', () => {
+    const a = parseEvents({
+      pageUrl: 'https://s.tld/league/nba',
+      anchors: [{ href: 'https://s.tld/stream/lakers-vs-celtics', text: 'Lakers vs Celtics NBA LIVE' }],
+    });
+    const b = parseEvents({
+      pageUrl: 'https://s.tld/league/mma',
+      anchors: [
+        { href: 'https://s.tld/stream/topuria-vs-gaethje', text: 'Topuria vs Gaethje UFC 8:00 PM ET' },
+        { href: 'https://s.tld/stream/lakers-vs-celtics?x=1', text: 'Lakers vs Celtics NBA LIVE' }, // dup
+      ],
+    });
+    const merged = mergeEvents([a, b]);
+    expect(merged).toHaveLength(2); // the duplicate Lakers link collapsed
+    expect(merged[0]!.status).toBe('live'); // live first
+    expect(merged[0]!.title).toMatch(/Lakers vs Celtics/);
+    expect(merged[1]!.title).toMatch(/Topuria vs Gaethje/);
   });
 });
 
@@ -108,7 +150,7 @@ describe('parseEvents', () => {
       ],
     });
     expect(out).toHaveLength(1);
-    expect(out[0]!.title).toMatch(/Topuria vs Gaethje/i);
+    expect(out[0]!.title).toBe('Topuria vs Gaethje'); // event-series prefix + "Start time" trimmed
     expect(out[0]).toMatchObject({ sport: 'UFC/MMA', status: 'upcoming' });
     expect(out[0]!.url).toMatch(/\/stream\//);
   });

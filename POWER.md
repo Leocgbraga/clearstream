@@ -58,6 +58,12 @@ directly so you skip clicking through the schedule's ad-trap links:
   booby-trapped onclick/popunders); then **Resolve streams** there.
 - **▶ Watch** — one click: resolve that game end-to-end (open its event page in hidden tabs, harvest its
   mirrors, resolve, play the best) — every ad page skipped. A 2-level use of the resolver.
+- **🔎 Find all games (full-site crawl)** — for a **category-only landing page** that lists no games
+  itself (e.g. crackstreams' homepage is just `/league/<sport>` sections), the popup follows those
+  section links in hidden tabs, scans each, and aggregates every game into one list. Runs automatically
+  when the current page lists nothing but has category links; also available as a button. Bounded: ≤12
+  category pages, 3 concurrent, 8 s each ([`background.ts` `crawlSchedule`]); pure pieces
+  `categoryLinks` + `mergeEvents` in [`events.ts`](src/core/resolver/events.ts).
 
 **Domain-agnostic — no per-site selectors.** The scan ([`background.ts` `scanForEvents`] across all
 frames) harvests both `<a href>` **and clickable non-anchors** — `onclick` / `data-href` `<div>`s, the
@@ -70,11 +76,12 @@ card/row. Verified against the real streameast homepage structure (23 onclick-`<
 `/links/<slug>`). The 🔧 debug panel shows a per-frame readout (a[href] / clickable / "vs" counts +
 samples) so any live page reveals exactly what it has.
 
-Known limits: (1) games rendered by site JS that never populates the readable DOM (e.g. crackstreams'
-`/league/*` pages use obfuscated JS) won't appear — the 🔧 readout confirms this per site. (2) Sites
-whose **homepage is only sport categories** (crackstreams) list nothing on the homepage; the games are
-on the `/league/<sport>` pages. A full-domain crawl (render each category page, aggregate) is the planned
-fix for that case — deferred pending confirmation it's needed (see memory).
+Category-only homepages (crackstreams) are handled by the crawl above: in a real browser the
+`/league/<sport>` pages DO render games as clean `<a class="card" href="/stream/…">` cards (the
+"obfuscated/invisible" issue only affects a plain `fetch` with no JS — the content script runs in the
+rendered page). Known limit: a site that renders games **only** behind a click/interaction the scan
+never triggers won't list — the 🔧 debug panel's per-frame readout (a[href] / clickable / "vs" counts)
+confirms what any live page actually exposes.
 
 ## Build & install
 

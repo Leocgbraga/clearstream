@@ -124,6 +124,28 @@ try {
     titles: onclick.map((e) => `${e.status}:${e.title}`),
   };
 
+  // --- Full-site crawl: a category-only landing page (no games itself) → follow its sport sections in
+  // hidden tabs, scan each, aggregate. Models crackstreams (homepage = categories; games on /league). ---
+  const catUrl = `${srv.urls.PAGES}/fixtures/schedule-categories`;
+  const catPage = await ctx.newPage();
+  await catPage.goto(catUrl);
+  const catTabId = await sw.evaluate((u) => chrome.tabs.query({}).then((t) => t.find((x) => x.url === u)?.id ?? -1), catUrl);
+  const crawlBefore = ctx.pages().length;
+  const crawlRes = await popup.evaluate((tabId) => chrome.runtime.sendMessage({ type: 'CRAWL_SCHEDULE', tabId }), catTabId);
+  const crawlAfter = ctx.pages().length;
+  await catPage.close();
+  const crawlEvents = crawlRes?.events ?? [];
+  results.crawl = {
+    ok:
+      crawlEvents.length === 2 &&
+      crawlEvents[0]?.status === 'live' && // live first
+      crawlEvents.some((e) => /Lakers vs Celtics/i.test(e.title)) && // from /league/nba
+      crawlEvents.some((e) => /Topuria vs Gaethje/i.test(e.title)) && // from /league/mma
+      crawlAfter <= crawlBefore, // category tabs cleaned up
+    titles: crawlEvents.map((e) => `${e.status}:${e.title}`),
+    cleanup: { before: crawlBefore, after: crawlAfter },
+  };
+
   // --- Watch a game: RESOLVE_EVENT opens the event page in a hidden tab, harvests ITS mirrors, resolves
   // them, returns the playable stream (2-level: schedule → event page → mirrors → stream), tabs cleaned. ---
   const eventUrl = `${srv.urls.PAGES}/fixtures/event-1`;
@@ -181,6 +203,7 @@ try {
   console.log(`  ${results.eventsCards.ok ? '✓' : '✗'} schedule (cards layout)     ${JSON.stringify(results.eventsCards)}`);
   console.log(`  ${results.eventsRows.ok ? '✓' : '✗'} schedule (rows layout)      ${JSON.stringify(results.eventsRows)}`);
   console.log(`  ${results.eventsOnclick.ok ? '✓' : '✗'} schedule (onclick divs)     ${JSON.stringify(results.eventsOnclick)}`);
+  console.log(`  ${results.crawl.ok ? '✓' : '✗'} crawl categories → games    ${JSON.stringify(results.crawl)}`);
   console.log(`  ${results.watchEvent.ok ? '✓' : '✗'} watch game (2-level resolve) ${JSON.stringify(results.watchEvent)}`);
   console.log(`  ${results.watchOnclick.ok ? '✓' : '✗'} watch game (onclick Watch)  ${JSON.stringify(results.watchOnclick)}`);
 
@@ -194,6 +217,7 @@ try {
     results.eventsCards.ok &&
     results.eventsRows.ok &&
     results.eventsOnclick.ok &&
+    results.crawl.ok &&
     results.watchEvent.ok &&
     results.watchOnclick.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);

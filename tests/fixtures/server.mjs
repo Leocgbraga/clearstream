@@ -214,6 +214,21 @@ const FIXTURES = {
          <div class="event-time">Monday, Jun 15, 2026, 10:00 PM ET</div><div class="event-meta">Soccer 22 minutes from now</div>
        </div>`,
     ),
+  // Category-only landing page (crackstreams shape): the homepage lists NO games, only sport sections.
+  // The crawl must follow these /league pages and aggregate the games each one lists.
+  'schedule-categories': () =>
+    doc(
+      'schedule-categories',
+      `<h1>Live Sports</h1>
+       <a href="/fixtures/league-nba">NBA Streams</a>
+       <a href="/fixtures/league-mma">MMA Streams</a>
+       <a href="https://facebook.com/share/x">Share on Facebook</a>`,
+    ),
+  'league-nba': () =>
+    doc('league-nba', `<h1>NBA Streams and Schedule</h1><a class="card" href="/fixtures/event-lakers-vs-celtics-99">Lakers vs Celtics 8:00 PM ET NBA LIVE</a>`),
+  'league-mma': () =>
+    doc('league-mma', `<h1>MMA Streams and Schedule</h1><a class="card" href="/fixtures/event-onclick">UFC Freedom 250: Topuria vs Gaethje Start time: 8:00 PM ET</a>`),
+
   // Event pages (mirror lists) the schedule links point to; event-1 + the lakers page carry resolvable mirrors.
   'event-1': () => doc('event-1', `<h1>Boston Red Sox vs Texas Rangers</h1><a href="/fixtures/embed-b">Link 1 HD</a><a href="/fixtures/embed-a">Server 2 SD</a>`),
   'event-2': () => doc('event-2', `<h1>Sweden vs Tunisia</h1><a href="/fixtures/embed-a">Link 1</a>`),

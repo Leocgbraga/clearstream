@@ -216,12 +216,20 @@ if (POWER) {
   resolveBtn.insertAdjacentElement('afterend', status);
 
   let resolving = false;
+  let crawling = false;
 
-  // Live progress: the background writes resolve:<tabId> to storage.session as mirrors resolve.
+  // Live progress: the background writes resolve:<tabId> to storage.session as mirrors resolve / a
+  // site crawl scans category pages.
   browser.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'session' || !resolving || currentTabId == null) return;
+    if (area !== 'session' || (!resolving && !crawling) || currentTabId == null) return;
     const p = changes[`resolve:${currentTabId}`]?.newValue as ResolveProgress | undefined;
     if (!p) return;
+    status.hidden = false;
+    if (crawling) {
+      status.textContent =
+        p.phase === 'done' ? `Found ${p.found} game${p.found === 1 ? '' : 's'}.` : `Scanning site ${p.done}/${p.total}… (${p.found} found)`;
+      return;
+    }
     status.textContent =
       p.phase === 'harvest'
         ? 'Scanning page for mirrors…'
@@ -311,6 +319,59 @@ if (POWER) {
       });
   };
 
+  // Crawl the whole site for games: follow a category-only landing page's section links and aggregate
+  // (crackstreams lists nothing on its homepage — the games live on /league/<sport>). `auto` runs the
+  // fallback silently (no flashing status on ordinary pages, where the crawl returns instantly).
+  const FIND_ALL_LABEL = '🔎 Find all games';
+  const findAllBtn = document.createElement('button');
+  findAllBtn.type = 'button';
+  findAllBtn.className = 'ghost';
+  findAllBtn.textContent = FIND_ALL_LABEL;
+  findAllBtn.title = 'Follow this site’s sport/league sections in hidden tabs and list every game found';
+  findAllBtn.style.cssText = 'width:100%;margin-top:6px';
+  status.insertAdjacentElement('afterend', findAllBtn);
+
+  function runCrawl(tabIdArg?: number, opts?: { auto?: boolean }): void {
+    const tabId = tabIdArg ?? currentTabId;
+    if (tabId == null || restricted || resolving || crawling) return;
+    crawling = true;
+    findAllBtn.disabled = true;
+    findAllBtn.textContent = 'Scanning…';
+    if (!opts?.auto) {
+      status.hidden = false;
+      status.textContent = 'Scanning site for games…';
+    }
+    void send<EventsResponse>({ type: 'CRAWL_SCHEDULE', tabId })
+      .then((res) => {
+        const events = res.events ?? [];
+        dlog('popup: crawl found', events.length, 'game(s)');
+        if (events.length) {
+          renderEvents(events);
+          status.hidden = true;
+        } else if (!opts?.auto) {
+          status.hidden = false;
+          status.textContent = 'No games found across this site.';
+        } else {
+          status.hidden = true;
+        }
+      })
+      .catch((err) => {
+        if (!opts?.auto) {
+          status.hidden = false;
+          status.textContent = 'Scan failed — see console.';
+        }
+        dlog('popup: crawl error', String(err));
+      })
+      .finally(() => {
+        crawling = false;
+        void browser.storage.session.remove(`resolve:${tabId}`);
+        findAllBtn.disabled = false;
+        findAllBtn.textContent = FIND_ALL_LABEL;
+      });
+  }
+
+  findAllBtn.addEventListener('click', () => runCrawl());
+
   function renderEvents(events: EventItem[]): void {
     eventsHdr.textContent = `📅 Live & upcoming (${events.length})`;
     eventsList.replaceChildren();
@@ -360,6 +421,8 @@ if (POWER) {
     const events = res.events ?? [];
     dlog('popup: listed', events.length, 'event(s) on tab', tab.id);
     if (events.length) renderEvents(events);
+    // Category-only landing page (crackstreams) lists nothing here → auto-crawl its sections.
+    else runCrawl(tab.id, { auto: true });
   })();
 }
 

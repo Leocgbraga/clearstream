@@ -15,7 +15,7 @@ import type { CapturedStream, ReplayHeaders } from '@/core/types';
 import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/core/detection';
 import { addStreams, clearTab, getStreams } from '@/core/storage';
 import type { ErrorResponse, EventsDebugResponse, EventsResponse, Message, OkResponse, PlaybackResponse, ResolveProgress, StreamsResponse } from '@/core/messages';
-import { parseEvents } from '@/core/resolver/events';
+import { parseEvents, categoryLinks, mergeEvents } from '@/core/resolver/events';
 import type { EventItem, LdEvent, RawAnchor } from '@/core/resolver/events';
 import { createHeaderInjector } from '@/core/header-injector';
 import { safeHttpUrl } from '@/core/url-safety';
@@ -420,8 +420,9 @@ function scanForEvents(): {
   return { anchors, jsonld, diag };
 }
 
-/** Scan every frame of a tab → ranked game list + per-frame diagnostics. */
-async function scanEvents(tabId: number): Promise<{ events: EventItem[]; frames: FrameDiag[] }> {
+/** Scan every frame of a tab → ranked game list + per-frame diagnostics (+ raw anchors/pageUrl, which
+ *  the crawl uses to find category links without re-scanning). */
+async function scanEvents(tabId: number): Promise<{ events: EventItem[]; frames: FrameDiag[]; anchors: RawAnchor[]; pageUrl: string }> {
   try {
     const tab = await browser.tabs.get(tabId);
     const results = await browser.scripting.executeScript({ target: { tabId, allFrames: true }, func: scanForEvents });
@@ -435,12 +436,61 @@ async function scanEvents(tabId: number): Promise<{ events: EventItem[]; frames:
       jsonld.push(...v.jsonld);
       frames.push(v.diag);
     }
-    const events = parseEvents({ anchors, jsonld, pageUrl: tab.url ?? '' });
+    const pageUrl = tab.url ?? '';
+    const events = parseEvents({ anchors, jsonld, pageUrl });
     dlog('events: parsed', events.length, 'game(s) from', anchors.length, 'link(s),', frames.length, 'frame(s)');
-    return { events, frames };
+    return { events, frames, anchors, pageUrl };
   } catch {
-    return { events: [], frames: [] };
+    return { events: [], frames: [], anchors: [], pageUrl: '' };
   }
+}
+
+// Scan ONE category/section URL in a hidden background tab → its parsed game list. Render + observe
+// only (no capture/decrypt); suppresses the page's popunders; ALWAYS cleans up the tab.
+async function scanUrlInTab(url: string): Promise<EventItem[]> {
+  const safe = safeHttpUrl(url);
+  if (!safe) return [];
+  let tabId: number | undefined;
+  try {
+    const tab = await browser.tabs.create({ url: safe, active: false });
+    tabId = tab.id ?? undefined;
+    if (tabId == null) return [];
+    await injectNeutralizer(tabId);
+    await waitForTabComplete(tabId, 8000);
+    return (await scanEvents(tabId)).events;
+  } catch {
+    return [];
+  } finally {
+    if (tabId != null) await browser.tabs.remove(tabId).catch(() => {});
+  }
+}
+
+// Full-site crawl: a category-only landing page (e.g. crackstreams) lists no games itself, only links
+// to /league/<sport> pages. Scan the current page, follow its category links in hidden tabs, and merge
+// every game into one list. Bounded: ≤12 category pages, 3 concurrent, 8s each. POWER only.
+async function crawlSchedule(tabId: number): Promise<EventItem[]> {
+  const cur = await scanEvents(tabId);
+  const cats = categoryLinks(cur.anchors, cur.pageUrl);
+  dlog('crawl:', cats.length, 'category page(s) to scan');
+  if (!cats.length) return cur.events; // not a category landing page → just this page's games
+  const POOL = 3;
+  let i = 0;
+  const lists: EventItem[][] = [cur.events];
+  reportResolve(tabId, { phase: 'harvest', done: 0, total: cats.length, found: cur.events.length });
+  let done = 0;
+  const worker = async (): Promise<void> => {
+    while (i < cats.length) {
+      const url = cats[i++]!;
+      lists.push(await scanUrlInTab(url));
+      done++;
+      reportResolve(tabId, { phase: 'resolve', done, total: cats.length, found: lists.flat().length });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(POOL, cats.length) || 1 }, worker));
+  const merged = mergeEvents(lists);
+  reportResolve(tabId, { phase: 'done', done: cats.length, total: cats.length, found: merged.length });
+  dlog('crawl: merged', merged.length, 'game(s) from', cats.length, 'categories');
+  return merged;
 }
 
 // If the best result is only a variant, probe its sibling master playlists and prefer a real master.
@@ -564,6 +614,7 @@ async function handle(
       msg.type === 'GET_STREAMS' ||
       msg.type === 'RESOLVE_PAGE' ||
       msg.type === 'LIST_EVENTS' ||
+      msg.type === 'CRAWL_SCHEDULE' ||
       msg.type === 'RESOLVE_EVENT' ||
       msg.type === 'EVENTS_DEBUG') &&
     !fromExtensionPage(sender)
@@ -590,6 +641,10 @@ async function handle(
     case 'LIST_EVENTS':
       // POWER only: parse this tab's schedule page into a game list. Folds to [] in store builds.
       return POWER ? { events: (await scanEvents(msg.tabId)).events } : { events: [] };
+
+    case 'CRAWL_SCHEDULE':
+      // POWER only: a category-only landing page → follow its section links + aggregate every game.
+      return POWER ? { events: await crawlSchedule(msg.tabId) } : { events: [] };
 
     case 'RESOLVE_EVENT':
       // POWER only: open one game's event page in hidden tabs, harvest + resolve it → ranked streams.
