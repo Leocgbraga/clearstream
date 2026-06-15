@@ -138,6 +138,21 @@ try {
     cleanup: { before: evBefore, after: evAfter },
   };
 
+  // Real streameast onion: the event page's "Watch" is an onclick <button> (no <a href>). resolveEvent
+  // must recover that target from the onclick handler, hop to the player page, and resolve — else it
+  // stays one layer short and nothing plays (the reported bug). Guards the onclick-mirror harvest.
+  const onclickEventUrl = `${srv.urls.PAGES}/fixtures/event-onclick`;
+  const ocBefore = ctx.pages().length;
+  const ocRes = await popup.evaluate((url) => chrome.runtime.sendMessage({ type: 'RESOLVE_EVENT', url, tabId: -1 }), onclickEventUrl);
+  const ocAfter = ctx.pages().length;
+  const ocStreams = ocRes?.streams ?? [];
+  results.watchOnclick = {
+    ok: ocStreams.some((s) => /master\.m3u8/i.test(s.manifestUrl ?? '')) && ocAfter <= ocBefore,
+    count: ocStreams.length,
+    top: ocStreams[0]?.manifestUrl,
+    cleanup: { before: ocBefore, after: ocAfter },
+  };
+
   // Popup UI (power build): the "✨ Resolve streams" button must be present + wired. The full
   // button→active-tab→render happy path isn't auto-driven here — Playwright can't bind a real
   // browser-action popup to an underlying active tab — so resolution itself is proven by the direct
@@ -167,6 +182,7 @@ try {
   console.log(`  ${results.eventsRows.ok ? '✓' : '✗'} schedule (rows layout)      ${JSON.stringify(results.eventsRows)}`);
   console.log(`  ${results.eventsOnclick.ok ? '✓' : '✗'} schedule (onclick divs)     ${JSON.stringify(results.eventsOnclick)}`);
   console.log(`  ${results.watchEvent.ok ? '✓' : '✗'} watch game (2-level resolve) ${JSON.stringify(results.watchEvent)}`);
+  console.log(`  ${results.watchOnclick.ok ? '✓' : '✗'} watch game (onclick Watch)  ${JSON.stringify(results.watchOnclick)}`);
 
   const allOk =
     results.single.ok &&
@@ -178,7 +194,8 @@ try {
     results.eventsCards.ok &&
     results.eventsRows.ok &&
     results.eventsOnclick.ok &&
-    results.watchEvent.ok;
+    results.watchEvent.ok &&
+    results.watchOnclick.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);
   process.exitCode = allOk ? 0 : 1;
 } finally {

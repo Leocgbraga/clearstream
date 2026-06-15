@@ -265,11 +265,34 @@ async function resolveMirrors(urls: string[], tabId?: number): Promise<CapturedS
 }
 
 // Harvest the page's mirror/embed candidates: DOM scan via scripting (all frames) → pure ranking.
+// Catches both <a href> AND clickable non-anchors — aggregators render the "Watch" button that hops
+// to the real player page (e.g. an event page → istreameast.cx) as an onclick/data-* <div>/<button>
+// to fire popunders + dodge scrapers, exactly like the schedule tiles (see scanForEvents). Missing
+// those left resolveEvent one layer short of the stream.
 function scanForMirrors(): { links: { href: string; text: string }[]; iframes: string[] } {
-  const links = [...document.querySelectorAll('a[href]')].map((a) => ({
-    href: (a as HTMLAnchorElement).href,
-    text: (a.textContent ?? '').trim().slice(0, 80),
-  }));
+  const seen = new Set<string>();
+  const links: { href: string; text: string }[] = [];
+  const add = (raw: string, el: Element): void => {
+    let abs = '';
+    try {
+      abs = new URL(raw, location.href).href; // resolve relative onclick paths against the page
+    } catch {
+      return;
+    }
+    if (!/^https?:/i.test(abs) || seen.has(abs)) return;
+    seen.add(abs);
+    const text = ((el as HTMLElement).innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    links.push({ href: abs, text });
+  };
+  for (const a of [...document.querySelectorAll('a[href]')].slice(0, 800)) add((a as HTMLAnchorElement).href, a);
+  for (const el of [...document.querySelectorAll('[data-href],[data-url],[data-link],[onclick]')].slice(0, 800)) {
+    let href = el.getAttribute('data-href') || el.getAttribute('data-url') || el.getAttribute('data-link') || '';
+    if (!href) {
+      const m = (el.getAttribute('onclick') || '').match(/['"`]((?:https?:\/\/|\/)[^'"`]+)['"`]/);
+      if (m) href = m[1]!;
+    }
+    if (href) add(href, el);
+  }
   const iframes = [...document.querySelectorAll('iframe[src]')].map((f) => (f as HTMLIFrameElement).src);
   return { links, iframes };
 }

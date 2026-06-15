@@ -220,6 +220,18 @@ const FIXTURES = {
   'event-3': () => doc('event-3', `<h1>Los Angeles Angels vs Tampa Bay Rays</h1><p>Finished</p>`),
   'event-lakers-vs-celtics-99': () =>
     doc('event-lakers', `<h1>Lakers vs Celtics</h1><a href="/fixtures/embed-b">Link 1 HD</a><a href="/fixtures/embed-a">Server 2 SD</a>`),
+  // Real streameast onion: the event page's "Watch" is an onclick <button> (NO <a href>) hopping to the
+  // player page (embed-b == istreameast.cx, which loads the .m3u8). Header categories are onclick too but
+  // carry no stream text. resolveEvent must recover the Watch target from onclick or it stays one layer
+  // short of the stream (the bug this fixture guards).
+  'event-onclick': () =>
+    doc(
+      'event-onclick',
+      `<h1>UFC Freedom 250 Topuria vs Gaethje</h1>
+       <nav><div onclick="location.href='/fixtures/nba'">NBA</div><div onclick="location.href='/fixtures/nba'">UFC</div></nav>
+       <table><tr><th>Streamer</th><th>Quality</th><th>Watch</th></tr>
+       <tr><td>StreamEast</td><td>FHD</td><td><button onclick="window.location.href='/fixtures/embed-b'">Watch</button></td></tr></table>`,
+    ),
   nba: () => doc('nba', `<h1>NBA</h1>`),
 
   // --- helpers used by the iframe fixtures (served from any origin) ---
