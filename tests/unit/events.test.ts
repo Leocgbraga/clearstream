@@ -94,6 +94,25 @@ describe('parseEvents', () => {
     expect(out.find((e) => e.title === 'Lakers vs Celtics')).toMatchObject({ status: 'live', sport: 'NBA' });
   });
 
+  it('parses a real crackstreams /league card (<a class="card"> matchup in text + /stream/ slug)', () => {
+    const out = parseEvents({
+      pageUrl: 'https://crackstreams.mx/league/mmastreams',
+      anchors: [
+        {
+          href: 'https://crackstreams.mx/stream/ufc-freedom-250-topuria-vs-gaethje',
+          text: 'UFC Freedom 250: Topuria vs Gaethje Start time: 8:00 PM ET',
+          slug: 'ufc-freedom-250-topuria-vs-gaethje',
+        },
+        { href: 'https://crackstreams.mx/league/nflstreams', text: 'NFL', slug: 'nflstreams' }, // category → drop
+        { href: 'https://crackstreams.mx/', text: 'Home', slug: '' }, // self/nav → drop
+      ],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.title).toMatch(/Topuria vs Gaethje/i);
+    expect(out[0]).toMatchObject({ sport: 'UFC/MMA', status: 'upcoming' });
+    expect(out[0]!.url).toMatch(/\/stream\//);
+  });
+
   it('dedupes a game with many per-mirror links into one row', () => {
     const out = parseEvents({
       pageUrl: PAGE,
