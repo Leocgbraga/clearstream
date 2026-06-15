@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — ClearStream</title>
+  <meta name="description" content="ClearStream collects nothing: no analytics, no tracking, no accounts, no servers." />
+  <style>
+    :root { color-scheme: light dark; }
+    body { max-width: 44rem; margin: 3rem auto; padding: 0 1.2rem;
+      font: 16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    h1 { font-size: 1.7rem; } h2 { margin-top: 2rem; font-size: 1.2rem; }
+    code { background: rgba(127,127,127,.18); padding: .1em .35em; border-radius: .3em; }
+    .lead { font-size: 1.05rem; font-weight: 600; }
+    a { color: #0b867a; } footer { margin-top: 3rem; opacity: .7; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy — ClearStream</h1>
+  <p class="lead">ClearStream collects nothing. It has no analytics, no tracking, no accounts, and
+    no servers — it never phones home.</p>
+
+  <h2>What stays on your device</h2>
+  <ul>
+    <li><strong>Detected streams</strong> are held in temporary session storage and are cleared
+      when you close your browser.</li>
+    <li><strong>Preferences</strong> (volume) and <strong>which video hosts have worked before</strong>
+      (so playback is faster next time) are stored locally on your device only. They are never
+      synced or uploaded.</li>
+  </ul>
+
+  <h2>Permissions, and why</h2>
+  <ul>
+    <li><strong>activeTab / scripting</strong> — when you click the toolbar button, ClearStream
+      scans <em>only the current tab</em> for a stream. Nothing runs on any page until you click.</li>
+    <li><strong>declarativeNetRequest</strong> — sets the Referer/Cookie/User-Agent headers a CDN
+      requires, scoped to the player tab, so your chosen stream plays. (On Firefox this is done with
+      blocking webRequest.)</li>
+    <li><strong>webRequest</strong> — optional; only if you turn on “auto-detect on all sites,” to
+      notice streams as a page loads. Inert until you grant host access.</li>
+    <li><strong>Optional host access</strong> — requested only when you click “Watch,” and only for
+      the specific video host of the stream you chose. You can revoke it at any time.</li>
+    <li><strong>storage</strong> — to remember your settings and which hosts have worked before,
+      locally.</li>
+  </ul>
+
+  <h2>No data collection</h2>
+  <p>ClearStream does not collect, transmit, sell, or share any personal data. The only network
+    requests it makes are to fetch the video stream you choose to watch, directly from its source.</p>
+
+  <h2>Responsibility</h2>
+  <p>ClearStream is a neutral media player. Users are solely responsible for ensuring they have
+    authorization to access any stream the extension detects.</p>
+
+  <footer>
+    ClearStream is free and open source —
+    <a href="https://github.com/leocgbraga/clearstream">github.com/leocgbraga/clearstream</a>.
+  </footer>
+</body>
+</html>

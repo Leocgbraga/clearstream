@@ -35,10 +35,11 @@ step) and attach the zip to the Release manually. The store zips stay resolver-f
 and the §1201 no-circumvention invariant.
 
 ## Before your first store submission (one-time gates)
-- **Privacy policy URL (required by all three stores):** host `PRIVACY.md` at a live `https://`
-  URL — GitHub Pages, the repo's `PRIVACY.md` blob/raw link, or any static host — and paste that
-  URL into each store dashboard (Chrome, Edge, AMO). The copy in `store/` references `PRIVACY.md`;
-  the stores need a resolvable URL, not a repo-relative path. Do this before the first manual upload.
+- **Privacy policy URL (required by all three stores):** the canonical URL is
+  **`https://leocgbraga.github.io/clearstream/privacy.html`** (served by GitHub Pages from
+  [`docs/`](docs/privacy.html); enable Pages once via repo Settings → Pages → source = `main` /
+  `/docs`). Paste that URL into each store dashboard (Chrome, Edge, AMO). The stores need a
+  resolvable URL, not a repo-relative path. Confirm it loads over https before the first upload.
 - **Data collection:** declare **none** — the extension sends nothing off-device.
 
 ## Wiring up store publishing (optional)
