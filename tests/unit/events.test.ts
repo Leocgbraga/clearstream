@@ -10,6 +10,12 @@ describe('matchup', () => {
     expect(matchup('⚽ Sweden vs Tunisia 10:00 PM ET Soccer 2 hours from now')).toBe('Sweden vs Tunisia');
     expect(matchup('Heat vs Knicks · NBA · 9:30 PM ET')).toBe('Heat vs Knicks');
   });
+  it('does not truncate team names that start with a month abbreviation', () => {
+    expect(matchup('Philadelphia Phillies vs Miami Marlins Monday, Jun 15, 2026, 6:40 PM ET')).toBe(
+      'Philadelphia Phillies vs Miami Marlins',
+    );
+    expect(matchup('Seattle Mariners vs Houston Astros 7:10 PM ET')).toBe('Seattle Mariners vs Houston Astros');
+  });
   it('handles @ and v. separators', () => {
     expect(matchup('Yankees @ Red Sox')).toBe('Yankees vs Red Sox');
   });
@@ -35,6 +41,7 @@ describe('sportOf / statusOf', () => {
   it('detects sport from keyword or emoji', () => {
     expect(sportOf('Boston Red Sox vs Texas Rangers MLB')).toBe('MLB');
     expect(sportOf('⚽ Sweden vs Tunisia')).toBe('Soccer');
+    expect(sportOf('🥊 UFC Freedom 250 Topuria vs Gaethje UFC LIVE')).toBe('UFC/MMA'); // league text beats 🥊
     expect(sportOf('Lakers vs Celtics')).toBeUndefined();
   });
   it('classifies status (and does not read "from now" as live)', () => {

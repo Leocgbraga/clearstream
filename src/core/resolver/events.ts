@@ -45,8 +45,9 @@ const SLUG_VS = /(?:^|[-_/])vs(?:[-_/])/i;
 // Pictographic emojis + variation selectors (sport/status icons) — stripped from titles.
 const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2300}-\u{27BF}\u{2B00}-\u{2BFF}️‍]/gu;
 // Where the team name ends and metadata begins: separators, days, months, clock/am-pm, status, tz.
+// NB month names are whole-word (jan/january…), NOT `mar[a-z]*` — that ate teams like Mar-lins / Mar-iners.
 const STOP =
-  /[·|,\n]|\b(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?)\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|\b(?:live|finished|ended|final|today|tomorrow)\b|\bfrom\s+now\b|\b(?:ET|EST|EDT|PT|PST|PDT|CT|GMT|UTC|BST)\b/i;
+  /[·|,\n]|\b(?:sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?)\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|\b(?:live|finished|ended|final|today|tomorrow)\b|\bfrom\s+now\b|\b(?:ET|EST|EDT|PT|PST|PDT|CT|GMT|UTC|BST)\b/i;
 const LEAGUE_LEAD = /^(?:mlb|nba|nfl|nhl|ncaa|ufc|mma|wwe|aew|epl|mls|atp|wta|pga|f1)\b[\s:–-]*/i;
 
 // Sport/league badges. Keyword first; emoji as a fallback for icon-only schedules.
@@ -130,8 +131,9 @@ export function titleFromSlug(slug: string): string | null {
 }
 
 export function sportOf(s: string): string | undefined {
-  for (const [e, name] of EMOJI_SPORT) if (s.includes(e)) return name;
+  // League text wins over the emoji — sites reuse 🥊 for UFC, ⚽ across competitions, etc.
   for (const [re, name] of SPORTS) if (re.test(s)) return name;
+  for (const [e, name] of EMOJI_SPORT) if (s.includes(e)) return name;
   return undefined;
 }
 
