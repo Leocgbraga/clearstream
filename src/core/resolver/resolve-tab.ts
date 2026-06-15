@@ -51,7 +51,7 @@ export async function resolveInTab(url: string, awaitCapture: AwaitCapture, time
   }
 }
 
-async function injectNeutralizer(tabId: number): Promise<void> {
+export async function injectNeutralizer(tabId: number): Promise<void> {
   const exec = browser.scripting.executeScript as unknown as (o: unknown) => Promise<unknown>;
   try {
     await exec({ target: { tabId, allFrames: true }, world: 'MAIN', injectImmediately: true, func: neutralizePage });

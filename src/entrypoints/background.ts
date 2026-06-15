@@ -22,7 +22,7 @@ import { safeHttpUrl } from '@/core/url-safety';
 import { recallWorkingHeaders, rememberWorkingHeaders } from '@/core/prefs';
 import { dlog } from '@/core/debug';
 import { POWER } from '@/core/power';
-import { resolveInTab, type AwaitCapture } from '@/core/resolver/resolve-tab';
+import { resolveInTab, injectNeutralizer, type AwaitCapture } from '@/core/resolver/resolve-tab';
 import { rankMirrorCandidates } from '@/core/resolver/harvest';
 import { deriveMasterCandidates, isMasterPlaylist } from '@/core/resolver/master-probe';
 
@@ -384,6 +384,57 @@ async function probeMaster(streams: CapturedStream[]): Promise<CapturedStream[]>
   return streams;
 }
 
+// Resolve until a tab finishes loading (or a cap), so we harvest a fully-rendered page.
+function waitForTabComplete(tabId: number, timeoutMs = 8000): Promise<void> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      browser.tabs.onUpdated.removeListener(onUpd);
+      resolve();
+    };
+    const onUpd = (id: number, info: { status?: string }): void => {
+      if (id === tabId && info.status === 'complete') finish();
+    };
+    browser.tabs.onUpdated.addListener(onUpd);
+    browser.tabs.get(tabId).then((t) => t.status === 'complete' && finish()).catch(() => {});
+    setTimeout(finish, timeoutMs);
+  });
+}
+
+// Resolve ONE game (POWER): open its event page in a hidden, ad-suppressed tab, harvest the page's
+// mirror links (and capture any stream the page loads directly), then resolve those mirrors to the
+// playable .m3u8(s). The 2-level use of the resolver — schedule → event page → mirrors → stream — that
+// lets the popup's "Watch" skip every ad page. Still render+observe only (§1201): no token/DRM work.
+async function resolveEvent(eventUrl: string, tabId: number): Promise<CapturedStream[]> {
+  const safe = safeHttpUrl(eventUrl);
+  if (!safe) return [];
+  reportResolve(tabId, { phase: 'harvest', done: 0, total: 0, found: 0 });
+  let eventTabId: number | undefined;
+  let direct: CapturedStream[] = [];
+  let mirrors: string[] = [];
+  try {
+    const tab = await browser.tabs.create({ url: safe, active: false });
+    eventTabId = tab.id ?? undefined;
+    if (eventTabId == null) return [];
+    await injectNeutralizer(eventTabId);
+    await waitForTabComplete(eventTabId, 8000);
+    mirrors = await harvestTab(eventTabId);
+    direct = await getStreams(eventTabId); // the event page may itself be the embed
+    if (!mirrors.length && !direct.length) direct = await awaitCapture(eventTabId, 4000); // give a late stream a beat
+  } catch {
+    /* event page failed to open */
+  } finally {
+    if (eventTabId != null) await browser.tabs.remove(eventTabId).catch(() => {});
+  }
+  dlog('resolver: event', safe, '→ direct', direct.length, '+ mirrors', mirrors.length);
+  const resolved = mirrors.length ? await resolveMirrors(mirrors, tabId) : [];
+  const all = await probeMaster(dedupeAndRank([...direct, ...resolved]));
+  reportResolve(tabId, { phase: 'done', done: mirrors.length, total: mirrors.length, found: all.length });
+  return all;
+}
+
 async function onDetected(tabId: number, streams: CapturedStream[]): Promise<CapturedStream[]> {
   const merged = await addStreams(tabId, streams);
   dlog('captured', streams.map((s) => `${s.source ?? '?'}:${s.kind ?? '?'} ${s.manifestUrl}`), '→ tab', tabId, 'has', merged.length);
@@ -460,6 +511,10 @@ async function handle(
     case 'LIST_EVENTS':
       // POWER only: parse this tab's schedule page into a game list. Folds to [] in store builds.
       return POWER ? { events: await listEventsForTab(msg.tabId) } : { events: [] };
+
+    case 'RESOLVE_EVENT':
+      // POWER only: open one game's event page in hidden tabs, harvest + resolve it → ranked streams.
+      return POWER ? { streams: await resolveEvent(msg.url, msg.tabId) } : { streams: [] };
 
     case 'OPEN_PLAYER': {
       // Reject any non-http(s) manifest URL before it can reach the player / header injection.

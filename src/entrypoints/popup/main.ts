@@ -263,6 +263,40 @@ if (POWER) {
   const badgeOf = (e: EventItem): string =>
     e.status === 'live' ? '🔴 LIVE' : e.status === 'finished' ? '⚪ done' : e.when ? `⏳ ${e.when}` : '⏳ soon';
 
+  // Watch a game in one click: resolve its event page in hidden ad-suppressed tabs → play the best.
+  // Live progress shows via the resolve:<tabId> storage listener above; on failure, fall back to Open.
+  const watchEvent = (e: EventItem): void => {
+    if (currentTabId == null || resolving) return;
+    const tabId = currentTabId;
+    resolving = true;
+    status.hidden = false;
+    status.textContent = `Resolving ${e.title}…`;
+    void send<StreamsResponse>({ type: 'RESOLVE_EVENT', url: e.url, tabId })
+      .then((res) => {
+        const streams = res.streams ?? [];
+        dlog('popup: event resolved', streams.length, 'stream(s) for', e.title);
+        if (streams.length) {
+          const origins = uniqueOrigins(streams);
+          const open = (): void => {
+            void send({ type: 'OPEN_PLAYER', streams });
+            window.close();
+          };
+          if (origins.length) void browser.permissions.request({ origins }).then(open, open);
+          else open();
+        } else {
+          status.textContent = `Couldn’t resolve ${e.title} — try Open.`;
+        }
+      })
+      .catch((err) => {
+        status.textContent = 'Resolve failed — see console.';
+        dlog('popup: event resolve error', String(err));
+      })
+      .finally(() => {
+        resolving = false;
+        void browser.storage.session.remove(`resolve:${tabId}`);
+      });
+  };
+
   function renderEvents(events: EventItem[]): void {
     eventsHdr.textContent = `📅 Live & upcoming (${events.length})`;
     eventsList.replaceChildren();
@@ -282,6 +316,11 @@ if (POWER) {
 
       const actions = document.createElement('div');
       actions.className = 'actions';
+      const watch = document.createElement('button');
+      watch.type = 'button';
+      watch.textContent = '▶ Watch';
+      watch.title = 'Resolve this game and play it (skips the ad pages)';
+      watch.addEventListener('click', () => watchEvent(e));
       const open = document.createElement('button');
       open.type = 'button';
       open.className = 'ghost';
@@ -291,7 +330,7 @@ if (POWER) {
         void browser.tabs.create({ url: e.url, active: true });
         window.close();
       });
-      actions.append(open);
+      actions.append(watch, open);
       li.append(info, actions);
       eventsList.append(li);
     }

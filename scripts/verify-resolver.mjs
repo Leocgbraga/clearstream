@@ -111,6 +111,20 @@ try {
     titles: rows.map((e) => `${e.status}:${e.title}`),
   };
 
+  // --- Watch a game: RESOLVE_EVENT opens the event page in a hidden tab, harvests ITS mirrors, resolves
+  // them, returns the playable stream (2-level: schedule → event page → mirrors → stream), tabs cleaned. ---
+  const eventUrl = `${srv.urls.PAGES}/fixtures/event-1`;
+  const evBefore = ctx.pages().length;
+  const evRes = await popup.evaluate((url) => chrome.runtime.sendMessage({ type: 'RESOLVE_EVENT', url, tabId: -1 }), eventUrl);
+  const evAfter = ctx.pages().length;
+  const evStreams = evRes?.streams ?? [];
+  results.watchEvent = {
+    ok: evStreams.some((s) => /master\.m3u8/i.test(s.manifestUrl ?? '')) && evAfter <= evBefore,
+    count: evStreams.length,
+    top: evStreams[0]?.manifestUrl,
+    cleanup: { before: evBefore, after: evAfter },
+  };
+
   // Popup UI (power build): the "✨ Resolve streams" button must be present + wired. The full
   // button→active-tab→render happy path isn't auto-driven here — Playwright can't bind a real
   // browser-action popup to an underlying active tab — so resolution itself is proven by the direct
@@ -138,6 +152,7 @@ try {
   console.log(`  ${results.popupUi.ok ? '✓' : '✗'} power popup resolve button  ${JSON.stringify(results.popupUi)}`);
   console.log(`  ${results.eventsCards.ok ? '✓' : '✗'} schedule (cards layout)     ${JSON.stringify(results.eventsCards)}`);
   console.log(`  ${results.eventsRows.ok ? '✓' : '✗'} schedule (rows layout)      ${JSON.stringify(results.eventsRows)}`);
+  console.log(`  ${results.watchEvent.ok ? '✓' : '✗'} watch game (2-level resolve) ${JSON.stringify(results.watchEvent)}`);
 
   const allOk =
     results.single.ok &&
@@ -147,7 +162,8 @@ try {
     results.harvestCleanup.ok &&
     results.popupUi.ok &&
     results.eventsCards.ok &&
-    results.eventsRows.ok;
+    results.eventsRows.ok &&
+    results.watchEvent.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);
   process.exitCode = allOk ? 0 : 1;
 } finally {
