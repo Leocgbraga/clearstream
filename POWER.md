@@ -48,6 +48,24 @@ malvertising/popunder gauntlet. The resolver automates that traversal:
 Bounds are explicit and logged: max 8 mirrors, 3 concurrent tabs, per-tab timeout (~18 s) + a capture
 debounce. A Cloudflare interstitial in a resolver tab is **skipped**, never auto-solved.
 
+## Plus: jump straight to a game (schedule lister)
+
+On an aggregator's schedule/landing page (the "Today's Games (24)" list), the popup surfaces the games
+directly so you skip clicking through the schedule's ad-trap links:
+- **📅 Live & upcoming** list in the popup (live-first; finished greyed), parsed from the page.
+- **Open** — jump straight to a game's event page via its clean URL (bypasses the schedule's
+  booby-trapped onclick/popunders); then **Resolve streams** there.
+- **▶ Watch** — one click: resolve that game end-to-end (open its event page in hidden tabs, harvest its
+  mirrors, resolve, play the best) — every ad page skipped. A 2-level use of the resolver.
+
+**Domain-agnostic — no per-site selectors.** The parser ([`events.ts`](src/core/resolver/events.ts))
+scores each link from orthogonal signals (a "Team A vs Team B" matchup in the link text, the URL slug,
+or the enclosing row; a sport/league keyword; a live/time cue) and reads the title from whichever source
+has it (text → slug → row → JSON-LD), with status/sport read from each game's own card/row. The same
+code lights up streameast-style cards, crackstreams-style slugs, and table/grid schedules. Known limit:
+games whose links/metadata only appear after a click/JS interaction aren't in the static scan — the
+debug build's console shows what was parsed.
+
 ## Build & install
 
 ### Chrome / Edge / Chromium

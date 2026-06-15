@@ -22,8 +22,9 @@ Live smokes (need the browsers installed locally; also run in CI):
 - `pnpm verify:fixtures` — Chromium: the real extension + its built deep-capture hook against local
   fixtures replicating hostile delivery/concealment patterns (a detection matrix · VOD/live/failover
   playback · Referer-gating). Server + committed test media live in `tests/fixtures/`.
-- `pnpm verify:resolver` — Chromium: the **power build** resolver against local mirror fixtures —
-  harvest → hidden-tab resolve → master-probe → rank, popunder suppression, and the popup button.
+- `pnpm verify:resolver` — Chromium: the **power build** resolver + schedule lister against local
+  fixtures — harvest → hidden-tab resolve → master-probe → rank, popunder suppression, the popup button,
+  the domain-agnostic event parser across two layouts, and the 2-level "Watch a game" resolve.
   Power-build only; see [`POWER.md`](POWER.md).
 
 ## Debugging on a real site

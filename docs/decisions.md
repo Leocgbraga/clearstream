@@ -220,3 +220,20 @@ resolver only renders + observes; it never decrypts/forges tokens or touches DRM
 flag in one build* (the resolver bytes + `tabs`/`<all_urls>` would still ship to stores); *separate
 repo/fork* (drift — the resolver reuses the store build's capture + failover player wholesale).
 See [03-distribution-policy](research/03-distribution-policy.md).
+
+### D22 — Schedule/event lister: a domain-agnostic, signal-based parser (POWER)
+**Decision:** On an aggregator's schedule page, surface the games in the popup — **Open** (clean nav to
+the event page, bypassing the schedule's click traps) + **Watch** (one-click 2-level resolve → play:
+schedule → event page → mirrors → stream). The parser (`core/resolver/events.ts`) is **signal-based with
+NO site-specific selectors**: per link it scores a "Team A vs Team B" matchup found in the link text /
+URL slug / enclosing single-link row / JSON-LD, plus sport + status cues, and reads the title from the
+first source that has the matchup. Status/sport are read from each game's OWN card/row, never a page-wide
+blob. The DOM scan reads `innerText` (keeps word boundaries) and takes the largest single-link ancestor
+as the card/row. POWER-only, gated + store-clean like the resolver (D21); Watch reuses the whole
+resolver + failover player; render+observe only (§1201).
+**Why:** Hardcoded per-site selectors break the moment a site reskins or a new one appears; one scoring
+heuristic generalizes across streameast (matchup in card text), crackstreams (matchup in slug), and
+table/grid layouts — proven by two structurally-different fixtures (`schedule-cards`/`schedule-rows`).
+**Rejected:** *per-domain adapters/config* (unmaintainable, brittle); *a remote site-rules list* (would
+be remote code — violates the no-remote-code audit, B-series); *parsing only anchor text* (misses the
+slug-only and sibling-row layouts that crackstreams-style sites use).
