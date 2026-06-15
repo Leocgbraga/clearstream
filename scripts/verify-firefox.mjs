@@ -16,7 +16,7 @@ const root = path.resolve('.');
 const buildDir = path.join(root, '.output/firefox-mv3');
 const xpi = path.join(root, '.output/clearstream-firefox.xpi');
 const FF_BIN = process.env.FIREFOX_BIN || '/Applications/Firefox.app/Contents/MacOS/firefox';
-const ADDON_ID = 'clearstream@daedastream.dev';
+const ADDON_ID = 'clearstream@leocgbraga.github.io';
 // Any fixed valid UUID — pinning it makes moz-extension://<uuid>/ deterministic for navigation.
 const UUID = 'a7c3e1d2-4b5f-4c6a-8d9e-0f1a2b3c4d5e';
 const MUX = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';

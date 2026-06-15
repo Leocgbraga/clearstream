@@ -51,7 +51,7 @@ export default defineConfig({
         permissions: [...base.permissions, 'webRequestBlocking'],
         browser_specific_settings: {
           gecko: {
-            id: 'clearstream@daedastream.dev',
+            id: 'clearstream@leocgbraga.github.io',
             // 140 is the floor that actually honors `data_collection_permissions` (desktop);
             // declaring a lower min would mean the key is silently ignored there (web-ext warns).
             strict_min_version: '140.0',

@@ -4,7 +4,7 @@ Use the copy in [`../listing.md`](../listing.md). AMO-specific fields below. AMO
 permissive of the three stores and is our primary, most resilient channel.
 
 - **Package:** `clearstream-<v>-firefox.zip`
-- **Add-on ID:** `clearstream@daedastream.dev` (set in the manifest)
+- **Add-on ID:** `clearstream@leocgbraga.github.io` (set in the manifest)
 - **Categories:** "Other" (and optionally "Web Development")
 - **Data collection:** the manifest declares `data_collection_permissions: { required: ['none'] }`;
   in the listing, confirm **no data collected**.

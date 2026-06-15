@@ -22,9 +22,27 @@ It runs entirely in **your** browser. No server, no analytics, no accounts, no t
   forge) will reject in-browser playback. A future optional native-player handoff recovers those.
 
 ## Install
-Not on stores yet. To run it now:
+
+**Easiest (one command):**
+```bash
+git clone https://github.com/leocgbraga/clearstream && cd clearstream
+./install.sh            # detector+player + resolver, Chrome   (--store for plain; --firefox for FF)
+```
+This builds and copies the extension to a **stable folder** (`~/.clearstream/…`) that survives
+rebuilds, then prints the exact "Load unpacked" steps and opens your extensions page. The one step
+no script can do for you is the final click — Chrome requires that by design.
+
+> Using an AI coding agent? Clone the repo and tell it *"set up ClearStream"* — [`CLAUDE.md`](CLAUDE.md)
+> / [`AGENTS.md`](AGENTS.md) walk it through the build + load.
+
+**Chrome Web Store (true one-click, coming soon):** the plain detector+player is being submitted as
+an *unlisted* listing — once live, install it from a single link with auto-updates, no building. The
+power/resolver build stays GitHub-only (stores won't carry stream resolvers).
+
+**Manual:**
 - **Chrome / Edge:** `pnpm install && pnpm build`, then load `.output/chrome-mv3` via
-  `chrome://extensions` → Developer mode → "Load unpacked."
+  `chrome://extensions` → Developer mode → "Load unpacked." (`.output/` is wiped on each rebuild —
+  prefer `./install.sh` for a folder that persists.)
 - **Firefox:** `pnpm build:firefox`, then `about:debugging` → This Firefox → "Load Temporary
   Add-on" → pick any file in `.output/firefox-mv3`.
 

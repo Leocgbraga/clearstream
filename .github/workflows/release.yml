@@ -85,7 +85,7 @@ jobs:
         if: ${{ env.AMO_API_KEY != '' }}
         uses: wdzeng/firefox-addon@3184ee491b500e080885e046051366a4228c6e5d # v1
         with:
-          addon-guid: clearstream@daedastream.dev
+          addon-guid: clearstream@leocgbraga.github.io
           xpi-path: .output/clearstream-${{ steps.vars.outputs.version }}-firefox.zip
           # AMO requires the source for a bundled/built add-on so reviewers can reproduce it.
           source-file-path: .output/clearstream-${{ steps.vars.outputs.version }}-sources.zip
