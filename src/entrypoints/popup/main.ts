@@ -1,7 +1,7 @@
 import './style.css';
 import { browser } from 'wxt/browser';
 import type { CapturedStream } from '@/core/types';
-import type { EventItem, EventsResponse, Message, ResolveProgress, StreamsResponse } from '@/core/messages';
+import type { EventItem, EventsDebugResponse, EventsResponse, Message, ResolveProgress, StreamsResponse } from '@/core/messages';
 import { t } from '@/core/i18n';
 import { DEBUG, dlog } from '@/core/debug';
 import { POWER } from '@/core/power';
@@ -87,6 +87,20 @@ async function renderDebug(streams: CapturedStream[]): Promise<void> {
     ...streams.map((s) => `  [${s.source ?? '?'}|${s.kind ?? '?'}] ${hostOf(s.manifestUrl)}${pathOf(s.manifestUrl)}`),
   ];
   if (!streams.length) lines.push('  (DOM scan runs on "Find streams"; passive + deep-capture need all-sites)');
+  // POWER: event-scan readout — shows whether games are present as <a>, clickable <div>s, or other tags,
+  // and in which frame, so a real schedule page reveals why it did/didn't list (no guessing).
+  if (POWER && currentTabId != null && !restricted) {
+    try {
+      const dbg = await send<EventsDebugResponse>({ type: 'EVENTS_DEBUG', tabId: currentTabId });
+      lines.push(`events parsed: ${dbg.parsed}  (${dbg.frames.length} frame(s))`);
+      for (const f of dbg.frames) {
+        lines.push(`  ${f.anchors} a[href] · ${f.clickish} clickable · ${f.vsCount} "vs"  — ${f.frame}`);
+        for (const s of f.vsSample) lines.push(`    ${s}`);
+      }
+    } catch {
+      lines.push('events: (debug scan failed)');
+    }
+  }
   panel.textContent = lines.join('\n');
 }
 

@@ -14,7 +14,8 @@ export type Message =
   | { type: 'CONTENT_STREAM'; url: string; pageUrl: string } // deep-capture content script → bg: found an .m3u8
   | { type: 'RESOLVE_PAGE'; tabId: number; urls?: string[] } // popup → bg (POWER): resolve mirrors → ranked streams
   | { type: 'LIST_EVENTS'; tabId: number } // popup → bg (POWER): parse the page's schedule → game list
-  | { type: 'RESOLVE_EVENT'; url: string; tabId: number }; // popup → bg (POWER): resolve one game → ranked streams
+  | { type: 'RESOLVE_EVENT'; url: string; tabId: number } // popup → bg (POWER): resolve one game → ranked streams
+  | { type: 'EVENTS_DEBUG'; tabId: number }; // popup(debug) → bg (POWER): event-scan diagnostics for the 🔧 panel
 
 export interface StreamsResponse {
   streams: CapturedStream[];
@@ -22,6 +23,12 @@ export interface StreamsResponse {
 /** POWER build only: the parsed game list for a schedule page. */
 export interface EventsResponse {
   events: EventItem[];
+}
+/** POWER + debug only: what the event scan saw per frame, so the 🔧 panel can show why a real site
+ *  did/didn't list games (anchors vs. clickable divs vs. matchups-as-other-tags, and which frame). */
+export interface EventsDebugResponse {
+  parsed: number;
+  frames: { frame: string; anchors: number; clickish: number; vsCount: number; vsSample: string[] }[];
 }
 export interface PlaybackResponse {
   streams: CapturedStream[];

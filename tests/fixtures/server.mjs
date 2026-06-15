@@ -192,6 +192,16 @@ const FIXTURES = {
        <div class="row"><a href="/fixtures/nba">NBA Schedule</a></div>
        <a href="https://t.me/sharelink">Telegram</a>`,
     ),
+  // onclick/data-* layout: games are clickable <div>s with NO <a href> (common — fires popunders +
+  // dodges scrapers). The scan must recover the target from onclick/data-href and still list them.
+  'schedule-onclick': () =>
+    doc(
+      'schedule-onclick',
+      `<h1>Games</h1>
+       <div class="g" onclick="window.open('/fixtures/event-1','_blank')">⚾ Red Sox vs Rangers · MLB · LIVE</div>
+       <div class="g" data-href="/fixtures/event-2">⚽ Sweden vs Tunisia · Soccer · 2 hours from now</div>
+       <div class="nav" onclick="location.href='/fixtures/nba'">NBA</div>`,
+    ),
   // Event pages (mirror lists) the schedule links point to; event-1 + the lakers page carry resolvable mirrors.
   'event-1': () => doc('event-1', `<h1>Boston Red Sox vs Texas Rangers</h1><a href="/fixtures/embed-b">Link 1 HD</a><a href="/fixtures/embed-a">Server 2 SD</a>`),
   'event-2': () => doc('event-2', `<h1>Sweden vs Tunisia</h1><a href="/fixtures/embed-a">Link 1</a>`),

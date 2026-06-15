@@ -14,7 +14,7 @@ import { browser } from 'wxt/browser';
 import type { CapturedStream, ReplayHeaders } from '@/core/types';
 import { canonicalKey, classifyByUrl, dedupeAndRank, isManifestUrl } from '@/core/detection';
 import { addStreams, clearTab, getStreams } from '@/core/storage';
-import type { ErrorResponse, EventsResponse, Message, OkResponse, PlaybackResponse, ResolveProgress, StreamsResponse } from '@/core/messages';
+import type { ErrorResponse, EventsDebugResponse, EventsResponse, Message, OkResponse, PlaybackResponse, ResolveProgress, StreamsResponse } from '@/core/messages';
 import { parseEvents } from '@/core/resolver/events';
 import type { EventItem, LdEvent, RawAnchor } from '@/core/resolver/events';
 import { createHeaderInjector } from '@/core/header-injector';
@@ -295,13 +295,25 @@ async function harvestTab(tabId: number): Promise<string[]> {
   }
 }
 
-// Schedule scan (POWER): per-anchor {href,text,slug,context} + JSON-LD events, structure-agnostic (no
-// per-site selectors). `parseEvents` (pure) turns this into the ranked game list. Injected via scripting.
+// Per-frame diagnostics so the 🔧 debug panel can show why a real site did/didn't list games.
+interface FrameDiag {
+  frame: string;
+  anchors: number;
+  clickish: number;
+  vsCount: number;
+  vsSample: string[];
+}
+
+// Schedule scan (POWER): per-target {href,text,slug,context} + JSON-LD + diagnostics. Structure-agnostic
+// (no per-site selectors). Harvests BOTH <a href> AND clickable non-anchors (these sites often render
+// games as onclick/data-* <div>s to fire popunders + dodge scrapers). `parseEvents` (pure) ranks them.
 function scanForEvents(): {
   anchors: { href: string; text: string; slug: string; context: string }[];
   jsonld: { name: string; startDate?: string; url?: string }[];
+  diag: FrameDiag;
 } {
   const norm = (s: string | null | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim();
+  const txt = (el: Element): string => norm((el as HTMLElement).innerText || el.textContent); // innerText keeps boundaries
   const slugOf = (href: string): string => {
     try {
       const segs = new URL(href).pathname.split('/').filter(Boolean);
@@ -311,26 +323,45 @@ function scanForEvents(): {
       return '';
     }
   };
-  // This game's card/row = the largest ancestor that still contains ONLY this one link (a multi-link
+  // This game's card/row = the largest ancestor that still wraps ONLY this one clickable (a multi-link
   // ancestor is the list/grid, not a single card). Structure-agnostic; never grabs the whole schedule.
   const cardText = (el: Element): string => {
     let node: Element | null = el.parentElement;
     let best = '';
     for (let i = 0; i < 5 && node; i++) {
-      if (node.querySelectorAll('a[href]').length > 1) break;
-      const t = norm((node as HTMLElement).innerText || node.textContent); // innerText keeps word boundaries
+      if (node.querySelectorAll('a[href],[onclick],[data-href],[data-url],[data-link]').length > 1) break;
+      const t = txt(node);
       if (t.length > 400) break;
       best = t;
       node = node.parentElement;
     }
     return best;
   };
-  const anchors = [...document.querySelectorAll('a[href]')].slice(0, 600).map((a) => ({
-    href: (a as HTMLAnchorElement).href,
-    text: norm((a as HTMLElement).innerText || a.textContent).slice(0, 200),
-    slug: slugOf((a as HTMLAnchorElement).href),
-    context: cardText(a).slice(0, 300),
-  }));
+  const anchors: { href: string; text: string; slug: string; context: string }[] = [];
+  const seen = new Set<string>();
+  const add = (rawHref: string, el: Element): void => {
+    let abs = '';
+    try {
+      abs = new URL(rawHref, location.href).href;
+    } catch {
+      return;
+    }
+    if (!/^https?:/i.test(abs) || seen.has(abs)) return;
+    seen.add(abs);
+    anchors.push({ href: abs, text: txt(el).slice(0, 200), slug: slugOf(abs), context: cardText(el).slice(0, 300) });
+  };
+  for (const a of [...document.querySelectorAll('a[href]')].slice(0, 800)) add((a as HTMLAnchorElement).href, a);
+  // Clickable non-anchors: target URL from data-* or a quoted path in the onclick handler.
+  let clickish = 0;
+  for (const el of [...document.querySelectorAll('[data-href],[data-url],[data-link],[onclick]')].slice(0, 800)) {
+    clickish++;
+    let href = el.getAttribute('data-href') || el.getAttribute('data-url') || el.getAttribute('data-link') || '';
+    if (!href) {
+      const m = (el.getAttribute('onclick') || '').match(/['"`]((?:https?:\/\/|\/)[^'"`]+)['"`]/);
+      if (m) href = m[1]!;
+    }
+    if (href) add(href, el);
+  }
   const jsonld: { name: string; startDate?: string; url?: string }[] = [];
   for (const s of [...document.querySelectorAll('script[type="application/ld+json"]')].slice(0, 20)) {
     try {
@@ -347,21 +378,45 @@ function scanForEvents(): {
       /* malformed ld+json */
     }
   }
-  return { anchors, jsonld };
+  // Diagnostic: how many "Team vs Team" elements exist regardless of tag, and as what (so we can see
+  // whether games are present-but-not-as-links). textContent (no reflow) for the count.
+  const SEPv = /\s(?:vs\.?|@)\s/i;
+  const vsEls = [...document.querySelectorAll('a,div,li,article,tr,td,h2,h3,h4,p,span,button')]
+    .slice(0, 4000)
+    .filter((el) => {
+      const t = norm(el.textContent);
+      return t.length > 4 && t.length < 80 && SEPv.test(t);
+    });
+  const diag: FrameDiag = {
+    frame: location.href.slice(0, 70),
+    anchors: document.querySelectorAll('a[href]').length,
+    clickish,
+    vsCount: vsEls.length,
+    vsSample: vsEls.slice(0, 5).map((el) => `<${el.tagName.toLowerCase()}> ${norm(el.textContent).slice(0, 44)}`),
+  };
+  return { anchors, jsonld, diag };
 }
 
-/** Parse the active tab's schedule page into a ranked game list (top frame only). */
-async function listEventsForTab(tabId: number): Promise<EventItem[]> {
+/** Scan every frame of a tab → ranked game list + per-frame diagnostics. */
+async function scanEvents(tabId: number): Promise<{ events: EventItem[]; frames: FrameDiag[] }> {
   try {
     const tab = await browser.tabs.get(tabId);
-    const [res] = await browser.scripting.executeScript({ target: { tabId }, func: scanForEvents });
-    const v = res?.result as { anchors: RawAnchor[]; jsonld: LdEvent[] } | undefined;
-    if (!v) return [];
-    const events = parseEvents({ anchors: v.anchors, jsonld: v.jsonld, pageUrl: tab.url ?? '' });
-    dlog('events: parsed', events.length, 'game(s) from tab', tabId);
-    return events;
+    const results = await browser.scripting.executeScript({ target: { tabId, allFrames: true }, func: scanForEvents });
+    const anchors: RawAnchor[] = [];
+    const jsonld: LdEvent[] = [];
+    const frames: FrameDiag[] = [];
+    for (const r of results) {
+      const v = r.result as { anchors: RawAnchor[]; jsonld: LdEvent[]; diag: FrameDiag } | undefined;
+      if (!v) continue;
+      anchors.push(...v.anchors);
+      jsonld.push(...v.jsonld);
+      frames.push(v.diag);
+    }
+    const events = parseEvents({ anchors, jsonld, pageUrl: tab.url ?? '' });
+    dlog('events: parsed', events.length, 'game(s) from', anchors.length, 'link(s),', frames.length, 'frame(s)');
+    return { events, frames };
   } catch {
-    return [];
+    return { events: [], frames: [] };
   }
 }
 
@@ -472,7 +527,7 @@ async function detectActiveTab(tabId: number): Promise<CapturedStream[]> {
 async function handle(
   msg: Message,
   sender: { tab?: { id?: number }; url?: string; frameId?: number },
-): Promise<StreamsResponse | EventsResponse | PlaybackResponse | OkResponse | ErrorResponse> {
+): Promise<StreamsResponse | EventsResponse | EventsDebugResponse | PlaybackResponse | OkResponse | ErrorResponse> {
   // Sensitive messages — only our own extension pages (popup/player) may send them (defense in
   // depth). Playback messages install header rules / read stashed streams; DETECT/GET_STREAMS read a
   // tab's captures by a caller-supplied tabId, so gate them too. The deep-capture content script that
@@ -486,7 +541,8 @@ async function handle(
       msg.type === 'GET_STREAMS' ||
       msg.type === 'RESOLVE_PAGE' ||
       msg.type === 'LIST_EVENTS' ||
-      msg.type === 'RESOLVE_EVENT') &&
+      msg.type === 'RESOLVE_EVENT' ||
+      msg.type === 'EVENTS_DEBUG') &&
     !fromExtensionPage(sender)
   ) {
     return { error: 'forbidden' };
@@ -510,11 +566,18 @@ async function handle(
 
     case 'LIST_EVENTS':
       // POWER only: parse this tab's schedule page into a game list. Folds to [] in store builds.
-      return POWER ? { events: await listEventsForTab(msg.tabId) } : { events: [] };
+      return POWER ? { events: (await scanEvents(msg.tabId)).events } : { events: [] };
 
     case 'RESOLVE_EVENT':
       // POWER only: open one game's event page in hidden tabs, harvest + resolve it → ranked streams.
       return POWER ? { streams: await resolveEvent(msg.url, msg.tabId) } : { streams: [] };
+
+    case 'EVENTS_DEBUG': {
+      // POWER only (the 🔧 debug panel): event-scan diagnostics so a real site shows why it did/didn't list.
+      if (!POWER) return { parsed: 0, frames: [] };
+      const r = await scanEvents(msg.tabId);
+      return { parsed: r.events.length, frames: r.frames };
+    }
 
     case 'OPEN_PLAYER': {
       // Reject any non-http(s) manifest URL before it can reach the player / header injection.

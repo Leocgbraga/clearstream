@@ -110,6 +110,16 @@ try {
       !rows.some((e) => /\/nba$/i.test(e.url) || /t\.me/i.test(e.url)),
     titles: rows.map((e) => `${e.status}:${e.title}`),
   };
+  // Games rendered as clickable <div>s (onclick/data-href), no <a href> — must still be recovered.
+  const onclick = await listEvents('schedule-onclick');
+  results.eventsOnclick = {
+    ok:
+      onclick.length === 2 &&
+      onclick.some((e) => e.title === 'Red Sox vs Rangers' && e.status === 'live') &&
+      onclick.some((e) => e.title === 'Sweden vs Tunisia') &&
+      !onclick.some((e) => /\/nba$/i.test(e.url)),
+    titles: onclick.map((e) => `${e.status}:${e.title}`),
+  };
 
   // --- Watch a game: RESOLVE_EVENT opens the event page in a hidden tab, harvests ITS mirrors, resolves
   // them, returns the playable stream (2-level: schedule → event page → mirrors → stream), tabs cleaned. ---
@@ -152,6 +162,7 @@ try {
   console.log(`  ${results.popupUi.ok ? '✓' : '✗'} power popup resolve button  ${JSON.stringify(results.popupUi)}`);
   console.log(`  ${results.eventsCards.ok ? '✓' : '✗'} schedule (cards layout)     ${JSON.stringify(results.eventsCards)}`);
   console.log(`  ${results.eventsRows.ok ? '✓' : '✗'} schedule (rows layout)      ${JSON.stringify(results.eventsRows)}`);
+  console.log(`  ${results.eventsOnclick.ok ? '✓' : '✗'} schedule (onclick divs)     ${JSON.stringify(results.eventsOnclick)}`);
   console.log(`  ${results.watchEvent.ok ? '✓' : '✗'} watch game (2-level resolve) ${JSON.stringify(results.watchEvent)}`);
 
   const allOk =
@@ -163,6 +174,7 @@ try {
     results.popupUi.ok &&
     results.eventsCards.ok &&
     results.eventsRows.ok &&
+    results.eventsOnclick.ok &&
     results.watchEvent.ok;
   console.log(`\nVERIFY RESOLVER: ${allOk ? 'PASS' : 'FAIL'}`);
   process.exitCode = allOk ? 0 : 1;
