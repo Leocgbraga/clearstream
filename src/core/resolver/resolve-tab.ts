@@ -35,8 +35,11 @@ function neutralizePage(): void {
 export type AwaitCapture = (tabId: number, timeoutMs: number) => Promise<CapturedStream[]>;
 
 /** Resolve ONE embed/mirror URL → the .m3u8(s) it loads. Opens a hidden tab, suppresses ads, waits for
- *  deep-capture, and ALWAYS cleans up the tab. Returns [] on timeout/failure (never throws). */
-export async function resolveInTab(url: string, awaitCapture: AwaitCapture, timeoutMs = 18_000): Promise<CapturedStream[]> {
+ *  deep-capture, and ALWAYS cleans up the tab. Returns [] on timeout/failure (never throws).
+ *  The window is generous (30s): real player pages cold-load a pile of ad scripts BEFORE the player
+ *  requests the .m3u8, which can exceed ~18s on a first hit (warm/cached loads are far faster). A capture
+ *  still settles ~1.2s later (the onDetected debounce), so this only extends the worst case, not success. */
+export async function resolveInTab(url: string, awaitCapture: AwaitCapture, timeoutMs = 30_000): Promise<CapturedStream[]> {
   let tabId: number | undefined;
   try {
     const tab = await browser.tabs.create({ url, active: false });

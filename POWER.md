@@ -45,7 +45,8 @@ malvertising/popunder gauntlet. The resolver automates that traversal:
 5. **Play** — the ranked list goes to the **existing** failover player + header injection. No player
    changes; resolution just feeds it a richer, pre-resolved list.
 
-Bounds are explicit and logged: max 8 mirrors, 3 concurrent tabs, per-tab timeout (~18 s) + a capture
+Bounds are explicit and logged: max 8 mirrors, 3 concurrent tabs, per-tab timeout (~30 s, headroom for
+a real player page's cold ad-script load before it requests the .m3u8) + a capture
 debounce. A Cloudflare interstitial in a resolver tab is **skipped**, never auto-solved.
 
 ## Plus: jump straight to a game (schedule lister)
